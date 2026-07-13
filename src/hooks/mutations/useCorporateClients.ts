@@ -334,6 +334,7 @@ export function useUpdateCorporateLedgerEntry() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['corporate_ledger', variables.branch_id] });
       queryClient.invalidateQueries({ queryKey: ['corporate_branches'] });
+      queryClient.invalidateQueries({ queryKey: ['corporate_clients'] });
     },
   });
 }
