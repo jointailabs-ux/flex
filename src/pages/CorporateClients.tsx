@@ -606,7 +606,7 @@ export default function CorporateClients() {
                         <div className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Last Invoice</div>
                         {(() => {
                           const ledger = branch.ledger || [];
-                          const latestInvoice = [...ledger].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).find((l: any) => l.invoice_number);
+                          const latestInvoice = [...ledger].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).find((l: any) => l.invoice_number && l.invoice_number.trim() !== '');
                           if (latestInvoice) {
                             return (
                               <>
@@ -699,11 +699,15 @@ function LedgerSheet({ branch, isOpen, onClose }: { branch: CorporateBranch | nu
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [editDate, setEditDate] = useState('');
   const [editInvoice, setEditInvoice] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editNotes, setEditNotes] = useState('');
 
   const handleEditClick = (entry: any) => {
     setEditingEntryId(entry.id);
     setEditDate(entry.date);
     setEditInvoice(entry.invoice_number || '');
+    setEditAmount(entry.amount?.toString() || '');
+    setEditNotes(entry.notes || '');
   };
 
   const handleSaveEdit = async (entry: any) => {
@@ -713,9 +717,12 @@ function LedgerSheet({ branch, isOpen, onClose }: { branch: CorporateBranch | nu
         id: entry.id,
         branch_id: branch.id,
         reference_id: entry.reference_id,
+        original_amount: entry.amount,
         data: {
           date: editDate,
-          invoice_number: editInvoice || undefined
+          invoice_number: editInvoice || undefined,
+          amount: editAmount ? Number(editAmount) : undefined,
+          notes: editNotes || undefined
         }
       });
       toast.success('Entry updated successfully');
@@ -792,32 +799,51 @@ function LedgerSheet({ branch, isOpen, onClose }: { branch: CorporateBranch | nu
                           )}
                         </div>
                         {editingEntryId === entry.id ? (
-                          <div className="flex flex-col gap-2 mt-2 bg-muted/20 p-3 rounded-lg border">
-                            <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-3 mt-3 bg-muted/20 p-4 rounded-xl border">
+                            <div className="grid grid-cols-2 gap-3">
                               <div>
-                                <label className="text-[10px] font-bold text-muted-foreground uppercase">Date</label>
+                                <label className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Date</label>
                                 <Input 
                                   type="date" 
                                   value={editDate} 
                                   onChange={(e) => setEditDate(e.target.value)} 
-                                  className="h-8 text-xs bg-background"
+                                  className="h-9 text-xs bg-background"
                                 />
                               </div>
                               {entry.transaction_type === 'order' && (
                                 <div>
-                                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Invoice No.</label>
+                                  <label className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Invoice No.</label>
                                   <Input 
                                     value={editInvoice} 
                                     onChange={(e) => setEditInvoice(e.target.value)} 
                                     placeholder="Invoice #" 
-                                    className="h-8 text-xs bg-background"
+                                    className="h-9 text-xs bg-background"
                                   />
                                 </div>
                               )}
+                              <div>
+                                <label className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Amount</label>
+                                <Input 
+                                  type="number"
+                                  value={editAmount} 
+                                  onChange={(e) => setEditAmount(e.target.value)} 
+                                  placeholder="Amount" 
+                                  className="h-9 text-xs bg-background"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Description</label>
+                                <Input 
+                                  value={editNotes} 
+                                  onChange={(e) => setEditNotes(e.target.value)} 
+                                  placeholder="Notes..." 
+                                  className="h-9 text-xs bg-background"
+                                />
+                              </div>
                             </div>
-                            <div className="flex gap-2 justify-end mt-1">
-                              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditingEntryId(null)}>Cancel</Button>
-                              <Button size="sm" className="h-7 text-xs" disabled={updateLedgerEntry.isPending} onClick={() => handleSaveEdit(entry)}>Save</Button>
+                            <div className="flex gap-2 justify-end mt-2">
+                              <Button variant="ghost" size="sm" className="h-8 text-xs font-bold" onClick={() => setEditingEntryId(null)}>Cancel</Button>
+                              <Button size="sm" className="h-8 text-xs font-bold" disabled={updateLedgerEntry.isPending} onClick={() => handleSaveEdit(entry)}>Save Changes</Button>
                             </div>
                           </div>
                         ) : (

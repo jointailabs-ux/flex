@@ -270,12 +270,14 @@ export function useUpdateCorporateLedgerEntry() {
       id, 
       branch_id, 
       data,
-      reference_id
+      reference_id,
+      original_amount
     }: { 
       id: string; 
       branch_id: string; 
-      data: { date: string; invoice_number?: string };
+      data: { date: string; invoice_number?: string; amount?: number; notes?: string };
       reference_id?: string | null;
+      original_amount?: number;
     }) => {
       // 1. Update the ledger entry
       const { error: ledgerError } = await supabase
@@ -287,15 +289,46 @@ export function useUpdateCorporateLedgerEntry() {
 
       // 2. If it's tied to an order, update the order as well
       if (reference_id) {
+        const orderData: any = {
+          order_date: data.date,
+          invoice_number: data.invoice_number
+        };
+        if (data.amount !== undefined) {
+          orderData.total_amount = data.amount;
+          orderData.balance_due = data.amount;
+        }
+
         const { error: orderError } = await supabase
           .from('corporate_orders')
-          .update({
-            order_date: data.date,
-            invoice_number: data.invoice_number
-          })
+          .update(orderData)
           .eq('id', reference_id);
 
         if (orderError) throw orderError;
+      }
+
+      // 3. Recalculate balances if amount changed
+      if (data.amount !== undefined && original_amount !== undefined && data.amount !== original_amount) {
+        const { data: allLedger } = await supabase
+          .from('corporate_ledger')
+          .select('id, amount, transaction_type, date, created_at')
+          .eq('branch_id', branch_id)
+          .order('date', { ascending: true })
+          .order('created_at', { ascending: true });
+
+        if (allLedger) {
+          let runningBalance = 0;
+          for (const entry of allLedger) {
+            if (entry.transaction_type === 'order') {
+              runningBalance -= Number(entry.amount);
+            } else {
+              runningBalance += Number(entry.amount);
+            }
+            await supabase
+              .from('corporate_ledger')
+              .update({ balance: runningBalance })
+              .eq('id', entry.id);
+          }
+        }
       }
     },
     onSuccess: (_, variables) => {
