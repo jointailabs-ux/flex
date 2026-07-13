@@ -591,13 +591,32 @@ export default function CorporateClients() {
                     {branch.address && <CardDescription>{branch.address}</CardDescription>}
                   </CardHeader>
                   <CardContent className="p-6 flex-1 flex flex-col justify-center">
-                    <div className="text-center mb-6">
-                      <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">Branch Balance</div>
-                      <div className={`text-3xl font-black ${branch.currentBalance < 0 ? 'text-destructive' : branch.currentBalance > 0 ? 'text-green-600' : 'text-foreground'}`}>
-                        {formatCurrency(Math.abs(branch.currentBalance || 0))}
+                    <div className="flex justify-between items-center mb-6 gap-4">
+                      <div className="text-left">
+                        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Branch Balance</div>
+                        <div className={`text-2xl font-black ${branch.currentBalance < 0 ? 'text-destructive' : branch.currentBalance > 0 ? 'text-green-600' : 'text-foreground'}`}>
+                          {formatCurrency(Math.abs(branch.currentBalance || 0))}
+                        </div>
+                        <div className="text-xs font-semibold mt-1 text-muted-foreground">
+                          {branch.currentBalance < 0 ? 'Outstanding Due' : branch.currentBalance > 0 ? 'Advance Credit' : 'Zero Balance'}
+                        </div>
                       </div>
-                      <div className="text-sm font-semibold mt-1 text-muted-foreground">
-                        {branch.currentBalance < 0 ? 'Outstanding Due' : branch.currentBalance > 0 ? 'Advance Credit' : 'Zero Balance'}
+                      
+                      <div className="text-right flex flex-col items-end border-l pl-4 border-border/50">
+                        <div className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Last Invoice</div>
+                        {(() => {
+                          const ledger = branch.ledger || [];
+                          const latestInvoice = [...ledger].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).find((l: any) => l.invoice_number);
+                          if (latestInvoice) {
+                            return (
+                              <>
+                                <div className="text-sm font-bold text-foreground">#{latestInvoice.invoice_number}</div>
+                                <div className="text-[10px] text-muted-foreground mt-0.5">{new Date(latestInvoice.date).toLocaleDateString()}</div>
+                              </>
+                            );
+                          }
+                          return <div className="text-[10px] font-medium text-muted-foreground italic">No invoices yet</div>;
+                        })()}
                       </div>
                     </div>
                     
