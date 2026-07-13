@@ -605,8 +605,7 @@ export default function CorporateClients() {
                       <div className="text-right flex flex-col items-end border-l pl-4 border-border/50">
                         <div className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Last Invoice</div>
                         {(() => {
-                          const ledger = branch.ledger || [];
-                          const latestInvoice = [...ledger].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).find((l: any) => l.invoice_number && l.invoice_number.trim() !== '');
+                          const latestInvoice = branch.latest_invoice;
                           if (latestInvoice) {
                             return (
                               <>

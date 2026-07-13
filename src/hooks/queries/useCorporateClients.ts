@@ -123,9 +123,20 @@ export function useCorporateBranches(clientId: string | null) {
           .order('created_at', { ascending: false })
           .limit(1);
           
+        // Get latest invoice
+        const { data: invoiceData } = await supabase
+          .from('corporate_ledger')
+          .select('invoice_number, date')
+          .eq('branch_id', branch.id)
+          .not('invoice_number', 'is', null)
+          .neq('invoice_number', '')
+          .order('date', { ascending: false })
+          .limit(1);
+          
         return {
           ...branch,
-          currentBalance: ledgerData?.[0]?.balance || 0
+          currentBalance: ledgerData?.[0]?.balance || 0,
+          latest_invoice: invoiceData?.[0] || null
         };
       }));
       
