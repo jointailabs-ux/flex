@@ -57,7 +57,6 @@ export default function TempWorkerDashboard() {
     extraAllowance, 
     grossEarned, 
     monthAdvances, 
-    monthPaid, 
     monthNetPayable 
   } = useMemo(() => {
     if (!profile) {
@@ -68,7 +67,6 @@ export default function TempWorkerDashboard() {
         extraAllowance: 0, 
         grossEarned: 0, 
         monthAdvances: 0, 
-        monthPaid: 0, 
         monthNetPayable: 0 
       };
     }
@@ -106,11 +104,7 @@ export default function TempWorkerDashboard() {
       .filter((e: any) => e.transaction_type === 'advance_given')
       .reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
 
-    const monthPaid = inMonth
-      .filter((e: any) => e.transaction_type === 'payment_made')
-      .reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
-
-    const monthNetPayable = grossEarned - monthAdvances - monthPaid;
+    const monthNetPayable = grossEarned - monthAdvances;
 
     return {
       monthEntries: inMonth,
@@ -119,7 +113,6 @@ export default function TempWorkerDashboard() {
       extraAllowance,
       grossEarned,
       monthAdvances,
-      monthPaid,
       monthNetPayable
     };
   }, [allLedgerEntries, profile, selectedMonth, selectedYear]);
@@ -162,7 +155,7 @@ export default function TempWorkerDashboard() {
          <Button 
            variant="ghost" 
            onClick={() => signOut()}
-           className="h-12 w-12 rounded-2xl bg-red-600/10 border border-red-600/20 text-red-500 hover:bg-red-600 hover:text-white transition-all active:scale-95"
+           className="h-12 w-12 rounded-2xl bg-red-600/10 border border-red-600/20 text-red-500 hover:bg-red-600 hover:text-white transition-all active:scale-95 cursor-pointer"
          >
            <LogOut size={20} strokeWidth={2.5} />
          </Button>
@@ -205,7 +198,7 @@ export default function TempWorkerDashboard() {
         </Button>
       </div>
 
-      {/* Hero — Selected Month Net Payout Card (NO lifetime wallet balance displayed) */}
+      {/* Hero — Selected Month Net Payout Card */}
       <Card className="relative z-10 border-none shadow-[0_40px_100px_-20px_rgba(234,88,12,0.35)] rounded-[3.5rem] bg-white dark:bg-neutral-950 overflow-hidden border border-black/5 dark:border-white/5 group">
          <div className="absolute inset-0 brand-gradient opacity-10 group-hover:opacity-20 transition-opacity duration-700" />
          <div className="absolute -right-20 -top-20 w-80 h-80 bg-orange-600/20 blur-[100px] rounded-full hidden lg:block" />
@@ -243,14 +236,14 @@ export default function TempWorkerDashboard() {
                      <h4 className={`text-base font-black uppercase tracking-widest ${
                        monthNetPayable > 0 ? 'text-orange-500' : 'text-emerald-400'
                      }`}>
-                        {monthNetPayable > 0 ? 'Pending Payout' : grossEarned > 0 ? 'Fully Disbursed' : 'No Work Logged'}
+                        {monthNetPayable > 0 ? 'Monthly Net Due' : grossEarned > 0 ? 'Fully Settled' : 'No Work Logged'}
                      </h4>
                   </div>
                </div>
             </div>
 
-            {/* 4 Financial Metrics Grid for Selected Month */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-black/5 dark:border-white/5">
+            {/* 3 Financial Metrics Grid for Selected Month */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-black/5 dark:border-white/5">
                {/* 1. Days Worked */}
                <div className="p-5 rounded-[2rem] bg-neutral-50 dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
                   <div className="flex items-center gap-2 text-blue-500 mb-2">
@@ -280,16 +273,6 @@ export default function TempWorkerDashboard() {
                   <h3 className="text-2xl font-black text-amber-500 tabular-nums">− Rs {monthAdvances.toLocaleString()}</h3>
                   <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400">Deducted from Month Pay</p>
                </div>
-
-               {/* 4. Paid by Owner */}
-               <div className="p-5 rounded-[2rem] bg-neutral-50 dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
-                  <div className="flex items-center gap-2 text-emerald-500 mb-2">
-                     <CheckCircle2 size={16} strokeWidth={2.5} />
-                     <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Paid by Owner</span>
-                  </div>
-                  <h3 className="text-2xl font-black text-emerald-500 tabular-nums">− Rs {monthPaid.toLocaleString()}</h3>
-                  <p className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">Directly Paid / Settled</p>
-               </div>
             </div>
          </CardContent>
       </Card>
@@ -302,7 +285,7 @@ export default function TempWorkerDashboard() {
                   {FULL_MONTHS[selectedMonth - 1]} <span className="text-orange-600">Work Ledger</span>
                </h2>
                <p className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.3em] mt-1">
-                  Detailed logs of wages, extra duty, advances & settlements
+                  Detailed logs of wages, extra duty & advances
                </p>
             </div>
             <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center text-neutral-500">
@@ -326,8 +309,8 @@ export default function TempWorkerDashboard() {
                const isNightAllowance = isWage && (descLower.includes('night duty') || descLower.includes('night allowance') || descLower.includes('overtime'));
                
                const IconComp = isNightAllowance ? Zap : isWage ? ArrowDownLeft : isPayment ? CheckCircle2 : TrendingDown;
-               const label = isNightAllowance ? 'Night Duty / Overtime' : isWage ? 'Daily Wage Log' : isPayment ? 'Paid by Owner' : 'Advance Taken';
-               const isDeduction = isAdvance || isPayment;
+               const label = isNightAllowance ? 'Night Duty / Overtime' : isWage ? 'Daily Wage Log' : isPayment ? 'Settlement Payment' : 'Advance Taken';
+               const isDeduction = isAdvance;
                const prefix = isDeduction ? '−' : '+';
                const amountColor = isAdvance ? 'text-amber-500' : isPayment ? 'text-emerald-500' : isNightAllowance ? 'text-purple-500' : 'text-neutral-900 dark:text-white';
 
