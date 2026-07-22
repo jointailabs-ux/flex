@@ -76,6 +76,7 @@ export default function SalaryManagement() {
   const [payrollSearch, setPayrollSearch] = useState('');
   const [tempSearch, setTempSearch] = useState('');
   const [rosterSearch, setRosterSearch] = useState('');
+  const [tempViewMode, setTempViewMode] = useState<'month' | 'all_time'>('month');
 
   const handlePrevMonth = () => {
     if (selectedMonth === 1) {
@@ -323,13 +324,17 @@ export default function SalaryManagement() {
     });
   }, [tempWorkers, allLedgerEntries, selectedMonth, selectedYear]);
 
-  // Comprehensive Temporary Summary for the selected month
+  // Comprehensive Temporary Summary for month and all-time
   const tempSummary = useMemo(() => {
     const totalMonthlyEarned = tempLedgerData.reduce((s, w) => s + w.monthlyEarned, 0);
     const totalMonthlyAdvances = tempLedgerData.reduce((s, w) => s + w.monthlyAdvances, 0);
     const totalMonthlyPaidOut = tempLedgerData.reduce((s, w) => s + w.monthlyPaidOut, 0);
     const totalMonthlyPaid = totalMonthlyAdvances + totalMonthlyPaidOut;
     const totalMonthlyNetPayable = tempLedgerData.reduce((s, w) => s + w.monthlyNetPayable, 0);
+
+    const totalAllTimeEarned = tempLedgerData.reduce((s, w) => s + w.totalEarned, 0);
+    const totalAllTimeAdvances = tempLedgerData.reduce((s, w) => s + w.totalAdvances, 0);
+    const totalAllTimePaidOut = tempLedgerData.reduce((s, w) => s + w.totalPaidOut, 0);
     const totalWalletBalance = tempLedgerData.reduce((s, w) => s + w.balance, 0);
 
     return {
@@ -338,6 +343,9 @@ export default function SalaryManagement() {
       totalMonthlyPaidOut,
       totalMonthlyPaid,
       totalMonthlyNetPayable,
+      totalAllTimeEarned,
+      totalAllTimeAdvances,
+      totalAllTimePaidOut,
       totalWalletBalance
     };
   }, [tempLedgerData]);
@@ -677,55 +685,6 @@ export default function SalaryManagement() {
               </select>
            </div>
 
-           <div className="h-14 flex items-center gap-1.5 bg-white dark:bg-neutral-900 p-2 rounded-2xl shadow-premium border border-white/50 dark:border-neutral-800">
-              <button 
-                onClick={handlePrevMonth}
-                title="Previous Month"
-                className="w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-700 dark:text-neutral-300 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-950/30 transition-colors"
-              >
-                <ChevronLeft size={16} strokeWidth={2.5} />
-              </button>
-
-              <div className="flex items-center gap-1 px-1">
-                <CalendarDays size={16} className="text-orange-600 shrink-0 ml-1" />
-                <select 
-                  className="bg-transparent text-[11px] font-black uppercase tracking-widest text-neutral-900 dark:text-neutral-100 outline-none appearance-none cursor-pointer pr-1"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                >
-                  {SHORT_MONTH_NAMES.map((m, i) => (
-                    <option key={m} value={i + 1}>{m}</option>
-                  ))}
-                </select>
-                <div className="w-px h-5 bg-neutral-200 dark:bg-neutral-700 mx-1" />
-                <select 
-                  className="bg-transparent text-[11px] font-black uppercase tracking-widest text-neutral-900 dark:text-neutral-100 outline-none appearance-none cursor-pointer pl-1 pr-1"
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(Number(e.target.value))}
-                >
-                  {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </div>
-
-              <button 
-                onClick={handleNextMonth}
-                title="Next Month"
-                className="w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-700 dark:text-neutral-300 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-950/30 transition-colors"
-              >
-                <ChevronRight size={16} strokeWidth={2.5} />
-              </button>
-
-              {!isCurrentMonth && (
-                <button
-                  onClick={handleResetToCurrentMonth}
-                  className="text-[9px] font-black uppercase tracking-wider bg-orange-100 dark:bg-orange-950/50 text-orange-600 px-2 py-1 rounded-lg hover:bg-orange-200 transition-colors ml-1"
-                  title="Reset to current month"
-                >
-                  Current
-                </button>
-              )}
-           </div>
-
            <Button 
              onClick={handleDownloadAllLedgers}
              variant="outline"
@@ -802,14 +761,16 @@ export default function SalaryManagement() {
                      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
                         <TrendingUp size={20} strokeWidth={2.5} />
                      </div>
-                     <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Temp Monthly Expense</p>
+                     <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Temp Expense</p>
                   </div>
                   
                   <div className="space-y-4">
                      <div className="space-y-1">
-                        <p className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Total Owed (Wallet Dues)</p>
+                        <p className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">
+                           {tempViewMode === 'all_time' ? 'Total Wallet Balance' : 'Selected Month Dues'}
+                        </p>
                         <h4 className="text-4xl font-black tabular-nums text-neutral-900 dark:text-white">
-                           Rs {tempLedgerData.reduce((s, w) => s + w.balance, 0).toLocaleString()}
+                           Rs {(tempViewMode === 'all_time' ? tempSummary.totalWalletBalance : tempSummary.totalMonthlyNetPayable).toLocaleString()}
                         </h4>
                      </div>
 
@@ -817,19 +778,19 @@ export default function SalaryManagement() {
                         <div>
                            <p className="text-[7px] font-black text-emerald-600 uppercase tracking-widest mb-1 leading-tight">Total Paid</p>
                            <p className="text-sm font-black text-neutral-900 dark:text-white tabular-nums">
-                              Rs {tempLedgerData.reduce((s, w) => s + w.monthlyPaidOut, 0).toLocaleString()}
+                              Rs {(tempViewMode === 'all_time' ? tempSummary.totalAllTimePaidOut : tempSummary.totalMonthlyPaidOut).toLocaleString()}
                            </p>
                         </div>
                         <div>
                            <p className="text-[7px] font-black text-amber-500 uppercase tracking-widest mb-1 leading-tight">Total Advance</p>
                            <p className="text-sm font-black text-neutral-900 dark:text-white tabular-nums">
-                              Rs {tempLedgerData.reduce((s, w) => s + w.monthlyAdvances, 0).toLocaleString()}
+                              Rs {(tempViewMode === 'all_time' ? tempSummary.totalAllTimeAdvances : tempSummary.totalMonthlyAdvances).toLocaleString()}
                            </p>
                         </div>
                         <div>
                            <p className="text-[7px] font-black text-blue-600 uppercase tracking-widest mb-1 leading-tight">Total Earned</p>
                            <p className="text-sm font-black text-neutral-900 dark:text-white tabular-nums">
-                              Rs {tempLedgerData.reduce((s, w) => s + w.totalEarned, 0).toLocaleString()}
+                              Rs {(tempViewMode === 'all_time' ? tempSummary.totalAllTimeEarned : tempSummary.totalMonthlyEarned).toLocaleString()}
                            </p>
                         </div>
                      </div>
@@ -862,18 +823,89 @@ export default function SalaryManagement() {
       </Card>
 
       {/* Main Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="h-16 bg-neutral-100 dark:bg-neutral-800 p-2 rounded-[2rem] mb-10 w-full lg:w-auto shadow-inner flex overflow-x-auto no-scrollbar justify-start lg:justify-center whitespace-nowrap">
-           <TabsTrigger value="payroll" className="rounded-[1.5rem] px-10 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white dark:data-[state=active]:bg-neutral-900 data-[state=active]:text-orange-600 data-[state=active]:shadow-premium transition-all">
-             <LayoutDashboard size={16} className="mr-2" /> Permanent Employee Salary
-           </TabsTrigger>
-           <TabsTrigger value="temp" className="rounded-[1.5rem] px-10 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white dark:data-[state=active]:bg-neutral-900 data-[state=active]:text-orange-600 data-[state=active]:shadow-premium transition-all">
-             <TrendingUp size={16} className="mr-2" /> Temporary Employee Salary
-           </TabsTrigger>
-           <TabsTrigger value="roster" className="rounded-[1.5rem] px-10 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white dark:data-[state=active]:bg-neutral-900 data-[state=active]:text-orange-600 data-[state=active]:shadow-premium transition-all">
-             <Users size={16} className="mr-2" /> Active Roster
-           </TabsTrigger>
-        </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-8">
+        {/* Prominent, Highly Visible Tab Navigation Hub */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-neutral-100 dark:bg-neutral-800/60 p-3 rounded-[2.5rem] shadow-inner">
+           <button
+             type="button"
+             onClick={() => setActiveTab('payroll')}
+             className={`p-6 rounded-[2rem] text-left transition-all duration-300 flex items-center justify-between group cursor-pointer ${
+               activeTab === 'payroll'
+                 ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-2xl shadow-blue-500/10 border-2 border-blue-500'
+                 : 'hover:bg-white/60 dark:hover:bg-neutral-800/60 text-neutral-600 dark:text-neutral-400 border-2 border-transparent'
+             }`}
+           >
+              <div className="flex items-center gap-4">
+                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 ${
+                   activeTab === 'payroll' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
+                 }`}>
+                    <ShieldCheck size={26} strokeWidth={2.5} />
+                 </div>
+                 <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400">Fixed Monthly</p>
+                    <h3 className="text-xl font-black tracking-tight">Permanent Employees</h3>
+                 </div>
+              </div>
+              <div className="text-right hidden sm:block">
+                 <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Due Payout</p>
+                 <p className="text-base font-black text-blue-600 tabular-nums">Rs {stats.totalDue.toLocaleString()}</p>
+              </div>
+           </button>
+
+           <button
+             type="button"
+             onClick={() => setActiveTab('temp')}
+             className={`p-6 rounded-[2rem] text-left transition-all duration-300 flex items-center justify-between group cursor-pointer ${
+               activeTab === 'temp'
+                 ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-2xl shadow-orange-500/10 border-2 border-orange-500'
+                 : 'hover:bg-white/60 dark:hover:bg-neutral-800/60 text-neutral-600 dark:text-neutral-400 border-2 border-transparent'
+             }`}
+           >
+              <div className="flex items-center gap-4">
+                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 ${
+                   activeTab === 'temp' ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/30' : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
+                 }`}>
+                    <TrendingUp size={26} strokeWidth={2.5} />
+                 </div>
+                 <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-600 dark:text-orange-400">Daily Wage & Wallet</p>
+                    <h3 className="text-xl font-black tracking-tight">Temporary Employees</h3>
+                 </div>
+              </div>
+              <div className="text-right hidden sm:block">
+                 <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{tempViewMode === 'all_time' ? 'Total Dues' : 'Month Dues'}</p>
+                 <p className="text-base font-black text-orange-600 tabular-nums">
+                    Rs {(tempViewMode === 'all_time' ? tempSummary.totalWalletBalance : tempSummary.totalMonthlyNetPayable).toLocaleString()}
+                 </p>
+              </div>
+           </button>
+
+           <button
+             type="button"
+             onClick={() => setActiveTab('roster')}
+             className={`p-6 rounded-[2rem] text-left transition-all duration-300 flex items-center justify-between group cursor-pointer ${
+               activeTab === 'roster'
+                 ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-2xl shadow-emerald-500/10 border-2 border-emerald-500'
+                 : 'hover:bg-white/60 dark:hover:bg-neutral-800/60 text-neutral-600 dark:text-neutral-400 border-2 border-transparent'
+             }`}
+           >
+              <div className="flex items-center gap-4">
+                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 ${
+                   activeTab === 'roster' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30' : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
+                 }`}>
+                    <Users size={26} strokeWidth={2.5} />
+                 </div>
+                 <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">Human Resources</p>
+                    <h3 className="text-xl font-black tracking-tight">Active Roster</h3>
+                 </div>
+              </div>
+              <div className="text-right hidden sm:block">
+                 <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Total Units</p>
+                 <p className="text-base font-black text-emerald-600 tabular-nums">{staff.length + tempWorkers.length} Personnel</p>
+              </div>
+           </button>
+        </div>
 
         {/* 1. Permanent Payroll Tab */}
         <TabsContent value="payroll" className="space-y-6">
@@ -1092,13 +1124,163 @@ export default function SalaryManagement() {
         </TabsContent>
 
         {/* 2. Temp Worker Ledger Tab */}
-         <TabsContent value="temp" className="space-y-6">
+        <TabsContent value="temp" className="space-y-6">
+           {/* Dedicated Month vs All-Time Filter & Summary Control Banner */}
+           <Card className="border-none shadow-premium rounded-[2.5rem] bg-gradient-to-r from-orange-900/10 via-neutral-900/5 to-orange-600/10 dark:from-neutral-900 dark:to-neutral-900 border border-orange-500/20 overflow-hidden">
+              <CardContent className="p-6 lg:p-8">
+                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-neutral-200 dark:border-neutral-800">
+                    <div>
+                       <div className="flex items-center gap-2">
+                          <span className="px-3 py-1 rounded-lg bg-orange-600 text-white text-[9px] font-black uppercase tracking-widest shadow-sm">
+                             {tempViewMode === 'all_time' ? 'Lifetime Ledger' : `${MONTH_NAMES[selectedMonth - 1]} ${selectedYear} Payroll`}
+                          </span>
+                          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                             • Temporary Workforce
+                          </span>
+                       </div>
+                       <h3 className="text-2xl lg:text-3xl font-black tracking-tight text-neutral-900 dark:text-white mt-2">
+                          {tempViewMode === 'all_time' ? (
+                             <>Lifetime Financial Summary for <span className="text-orange-600">Temporary Personnel</span></>
+                          ) : (
+                             <>Month-Wise Payout Breakdown for <span className="text-orange-600">{MONTH_NAMES[selectedMonth - 1]}</span></>
+                          )}
+                       </h3>
+                    </div>
+
+                    {/* View Mode Toggle Switcher & Month Controls */}
+                    <div className="flex flex-wrap items-center gap-3">
+                       {/* All-Time vs Month Switcher */}
+                       <div className="flex items-center p-1 bg-white dark:bg-neutral-950 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
+                          <button
+                            type="button"
+                            onClick={() => setTempViewMode('month')}
+                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer ${
+                              tempViewMode === 'month'
+                                ? 'bg-orange-600 text-white shadow-md'
+                                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                            }`}
+                          >
+                            📅 Month View
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTempViewMode('all_time')}
+                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer ${
+                              tempViewMode === 'all_time'
+                                ? 'bg-orange-600 text-white shadow-md'
+                                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                            }`}
+                          >
+                            🌐 All-Time Earnings
+                          </button>
+                       </div>
+
+                       {/* Month Selector Controls (Active in Month View) */}
+                       {tempViewMode === 'month' && (
+                         <div className="flex items-center gap-1.5 bg-white dark:bg-neutral-950 p-1.5 rounded-2xl shadow-sm border border-neutral-200 dark:border-neutral-800 shrink-0">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={handlePrevMonth}
+                              className="h-9 px-2 rounded-xl text-xs font-black uppercase tracking-widest text-neutral-700 dark:text-neutral-300 hover:bg-orange-50 dark:hover:bg-neutral-800"
+                            >
+                              <ChevronLeft size={16} />
+                            </Button>
+
+                            <div className="flex items-center gap-1 px-1">
+                              <select 
+                                className="bg-transparent text-[11px] font-black uppercase tracking-widest text-neutral-900 dark:text-neutral-100 outline-none appearance-none cursor-pointer pr-1"
+                                value={selectedMonth}
+                                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                              >
+                                {SHORT_MONTH_NAMES.map((m, i) => (
+                                  <option key={m} value={i + 1}>{m}</option>
+                                ))}
+                              </select>
+                              <div className="w-px h-4 bg-neutral-200 dark:bg-neutral-700 mx-0.5" />
+                              <select 
+                                className="bg-transparent text-[11px] font-black uppercase tracking-widest text-neutral-900 dark:text-neutral-100 outline-none appearance-none cursor-pointer pl-1"
+                                value={selectedYear}
+                                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                              >
+                                {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                              </select>
+                            </div>
+
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={handleNextMonth}
+                              className="h-9 px-2 rounded-xl text-xs font-black uppercase tracking-widest text-neutral-700 dark:text-neutral-300 hover:bg-orange-50 dark:hover:bg-neutral-800"
+                            >
+                              <ChevronRight size={16} />
+                            </Button>
+                         </div>
+                       )}
+                    </div>
+                 </div>
+
+                 {/* 4 Key Financial Metrics (Month vs All-Time) */}
+                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+                    <div className="p-5 rounded-2xl bg-white dark:bg-neutral-800/80 border border-neutral-100 dark:border-neutral-700/50 shadow-sm">
+                       <p className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                          <TrendingUp size={12} /> {tempViewMode === 'all_time' ? 'Lifetime Total Earned' : `${SHORT_MONTH_NAMES[selectedMonth - 1]} Wages Earned`}
+                       </p>
+                       <h4 className="text-2xl font-black text-neutral-900 dark:text-white tabular-nums">
+                          Rs {(tempViewMode === 'all_time' ? tempSummary.totalAllTimeEarned : tempSummary.totalMonthlyEarned).toLocaleString()}
+                       </h4>
+                       <p className="text-[9px] font-bold text-muted-foreground mt-1">
+                          {tempViewMode === 'all_time' ? 'Total wages earned across all time' : `Daily wages logged in ${SHORT_MONTH_NAMES[selectedMonth - 1]}`}
+                       </p>
+                    </div>
+
+                    <div className="p-5 rounded-2xl bg-white dark:bg-neutral-800/80 border border-neutral-100 dark:border-neutral-700/50 shadow-sm">
+                       <p className="text-[9px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                          <Clock size={12} /> {tempViewMode === 'all_time' ? 'Lifetime Advances Given' : `${SHORT_MONTH_NAMES[selectedMonth - 1]} Advances`}
+                       </p>
+                       <h4 className="text-2xl font-black text-neutral-900 dark:text-white tabular-nums">
+                          Rs {(tempViewMode === 'all_time' ? tempSummary.totalAllTimeAdvances : tempSummary.totalMonthlyAdvances).toLocaleString()}
+                       </h4>
+                       <p className="text-[9px] font-bold text-muted-foreground mt-1">
+                          {tempViewMode === 'all_time' ? 'Advances disbursed across all time' : `Advances given in ${SHORT_MONTH_NAMES[selectedMonth - 1]}`}
+                       </p>
+                    </div>
+
+                    <div className="p-5 rounded-2xl bg-white dark:bg-neutral-800/80 border border-neutral-100 dark:border-neutral-700/50 shadow-sm">
+                       <p className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                          <CheckCircle size={12} /> {tempViewMode === 'all_time' ? 'Lifetime Settlements Paid' : `${SHORT_MONTH_NAMES[selectedMonth - 1]} Settled`}
+                       </p>
+                       <h4 className="text-2xl font-black text-neutral-900 dark:text-white tabular-nums">
+                          Rs {(tempViewMode === 'all_time' ? tempSummary.totalAllTimePaidOut : tempSummary.totalMonthlyPaidOut).toLocaleString()}
+                       </h4>
+                       <p className="text-[9px] font-bold text-muted-foreground mt-1">
+                          {tempViewMode === 'all_time' ? 'Payments settled across all time' : `Payments settled in ${SHORT_MONTH_NAMES[selectedMonth - 1]}`}
+                       </p>
+                    </div>
+
+                    <div className="p-5 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-lg shadow-orange-500/20">
+                       <p className="text-[9px] font-black uppercase tracking-widest mb-1 text-orange-100 flex items-center gap-1.5">
+                          <Wallet size={12} /> {tempViewMode === 'all_time' ? 'Total Wallet Dues' : `${SHORT_MONTH_NAMES[selectedMonth - 1]} Net Payable`}
+                       </p>
+                       <h4 className="text-2xl font-black tabular-nums">
+                          Rs {(tempViewMode === 'all_time' ? tempSummary.totalWalletBalance : tempSummary.totalMonthlyNetPayable).toLocaleString()}
+                       </h4>
+                       <p className="text-[9px] font-bold text-orange-100/80 mt-1">
+                          {tempViewMode === 'all_time' ? 'Overall current wallet balance' : `Net due for ${SHORT_MONTH_NAMES[selectedMonth - 1]} ${selectedYear}`}
+                       </p>
+                    </div>
+                 </div>
+              </CardContent>
+           </Card>
+
            <Card className="border-none shadow-premium rounded-[3rem] bg-white dark:bg-neutral-900 overflow-hidden">
               <CardHeader className="p-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-neutral-50/50 dark:bg-neutral-800/30">
                  <div>
-                    <CardTitle className="text-2xl font-black tracking-tight">Temporary Workforce Ledger</CardTitle>
+                    <CardTitle className="text-2xl font-black tracking-tight">
+                       Temporary Workforce Ledger — {tempViewMode === 'all_time' ? 'Lifetime Summary' : `${MONTH_NAMES[selectedMonth - 1]} ${selectedYear}`}
+                    </CardTitle>
                     <CardDescription className="text-xs font-bold uppercase tracking-widest text-muted-foreground mt-2">
-                       Managing daily wages and advances for {tempLedgerData.length} active units
+                       Managing daily wages, advances and earnings for {tempLedgerData.length} active units
                     </CardDescription>
                  </div>
               </CardHeader>
@@ -1125,9 +1307,15 @@ export default function SalaryManagement() {
                         <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/20">
                           <th className="px-8 py-6 text-left text-[11px] font-black uppercase tracking-widest text-muted-foreground">Personnel</th>
                           <th className="px-6 py-6 text-right text-[11px] font-black uppercase tracking-widest text-muted-foreground">Daily Rate</th>
-                          <th className="px-6 py-6 text-right text-[11px] font-black uppercase tracking-widest text-muted-foreground">{SHORT_MONTH_NAMES[selectedMonth - 1]} Earned</th>
-                          <th className="px-6 py-6 text-right text-[11px] font-black uppercase tracking-widest text-muted-foreground">{SHORT_MONTH_NAMES[selectedMonth - 1]} Adv/Paid</th>
-                          <th className="px-6 py-6 text-right text-[11px] font-black uppercase tracking-widest text-muted-foreground">{SHORT_MONTH_NAMES[selectedMonth - 1]} Net Due</th>
+                          <th className="px-6 py-6 text-right text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+                             {tempViewMode === 'all_time' ? 'Lifetime Earned' : `${SHORT_MONTH_NAMES[selectedMonth - 1]} Earned`}
+                          </th>
+                          <th className="px-6 py-6 text-right text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+                             {tempViewMode === 'all_time' ? 'Lifetime Adv/Paid' : `${SHORT_MONTH_NAMES[selectedMonth - 1]} Adv/Paid`}
+                          </th>
+                          <th className="px-6 py-6 text-right text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+                             {tempViewMode === 'all_time' ? 'Lifetime Settled' : `${SHORT_MONTH_NAMES[selectedMonth - 1]} Net Due`}
+                          </th>
                           <th className="px-8 py-6 text-right text-[11px] font-black uppercase tracking-widest text-muted-foreground">Wallet Balance</th>
                           <th className="px-8 py-6 text-center text-[11px] font-black uppercase tracking-widest text-muted-foreground">Action</th>
                         </tr>
@@ -1165,22 +1353,24 @@ export default function SalaryManagement() {
                             </td>
                             <td className="px-6 py-8 text-right">
                                <p className="text-lg font-black text-blue-600 dark:text-blue-400 tabular-nums">
-                                  Rs {worker.monthlyEarned.toLocaleString()}
+                                  Rs {(tempViewMode === 'all_time' ? worker.totalEarned : worker.monthlyEarned).toLocaleString()}
                                </p>
                             </td>
                             <td className="px-6 py-8 text-right">
                                <div className="flex flex-col items-end">
                                  <p className="text-sm font-black text-neutral-700 dark:text-neutral-300 tabular-nums">
-                                    Rs {worker.monthlyPaid.toLocaleString()}
+                                    Rs {(tempViewMode === 'all_time' ? worker.alreadyPaid : worker.monthlyPaid).toLocaleString()}
                                  </p>
                                  <p className="text-[9px] font-semibold text-muted-foreground mt-0.5">
-                                    Adv: Rs {worker.monthlyAdvances} | Paid: Rs {worker.monthlyPaidOut}
+                                    Adv: Rs {tempViewMode === 'all_time' ? worker.totalAdvances : worker.monthlyAdvances} | Paid: Rs {tempViewMode === 'all_time' ? worker.totalPaidOut : worker.monthlyPaidOut}
                                  </p>
                                </div>
                             </td>
                             <td className="px-6 py-8 text-right">
-                               <p className={`text-lg font-black tabular-nums ${worker.monthlyNetPayable > 0 ? 'text-orange-600 dark:text-orange-400' : worker.monthlyNetPayable < 0 ? 'text-red-500' : 'text-neutral-400'}`}>
-                                  Rs {worker.monthlyNetPayable.toLocaleString()}
+                               <p className={`text-lg font-black tabular-nums ${
+                                 (tempViewMode === 'all_time' ? worker.totalPaidOut : worker.monthlyNetPayable) > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-neutral-400'
+                               }`}>
+                                  Rs {(tempViewMode === 'all_time' ? worker.totalPaidOut : worker.monthlyNetPayable).toLocaleString()}
                                </p>
                             </td>
                             <td className="px-8 py-8 text-right">
@@ -1264,11 +1454,11 @@ export default function SalaryManagement() {
                             </Button>
                          </div>
 
-                         {/* Month-Wise Financial Breakdown Box */}
+                         {/* Financial Breakdown Box (Month vs All-Time) */}
                          <div className="p-4 rounded-2xl bg-white dark:bg-neutral-900/60 border border-neutral-200 dark:border-neutral-700/50 space-y-3">
                             <div className="flex justify-between items-center pb-2 border-b border-neutral-100 dark:border-neutral-800">
                                <span className="text-[9px] font-black uppercase tracking-widest text-orange-600">
-                                  {MONTH_NAMES[selectedMonth - 1]} {selectedYear} Payroll
+                                  {tempViewMode === 'all_time' ? 'Lifetime All-Time Summary' : `${MONTH_NAMES[selectedMonth - 1]} ${selectedYear} Payroll`}
                                </span>
                                <span className="text-[9px] font-bold text-muted-foreground">
                                   Rate: Rs {Number(worker.daily_rate).toLocaleString()}
@@ -1277,19 +1467,31 @@ export default function SalaryManagement() {
 
                             <div className="grid grid-cols-2 gap-3 text-xs">
                                <div>
-                                  <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">{SHORT_MONTH_NAMES[selectedMonth - 1]} Earned</p>
-                                  <p className="font-black text-blue-600 dark:text-blue-400 text-base tabular-nums">Rs {worker.monthlyEarned.toLocaleString()}</p>
+                                  <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">
+                                     {tempViewMode === 'all_time' ? 'Lifetime Earned' : `${SHORT_MONTH_NAMES[selectedMonth - 1]} Earned`}
+                                  </p>
+                                  <p className="font-black text-blue-600 dark:text-blue-400 text-base tabular-nums">
+                                     Rs {(tempViewMode === 'all_time' ? worker.totalEarned : worker.monthlyEarned).toLocaleString()}
+                                  </p>
                                </div>
                                <div className="text-right">
-                                  <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">{SHORT_MONTH_NAMES[selectedMonth - 1]} Adv/Paid</p>
-                                  <p className="font-black text-neutral-700 dark:text-neutral-300 text-base tabular-nums">Rs {worker.monthlyPaid.toLocaleString()}</p>
+                                  <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">
+                                     {tempViewMode === 'all_time' ? 'Lifetime Adv/Paid' : `${SHORT_MONTH_NAMES[selectedMonth - 1]} Adv/Paid`}
+                                  </p>
+                                  <p className="font-black text-neutral-700 dark:text-neutral-300 text-base tabular-nums">
+                                     Rs {(tempViewMode === 'all_time' ? worker.alreadyPaid : worker.monthlyPaid).toLocaleString()}
+                                  </p>
                                </div>
                             </div>
 
                             <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800 flex justify-between items-center">
                                <div>
-                                  <p className="text-[8px] font-black uppercase tracking-widest text-orange-600">{SHORT_MONTH_NAMES[selectedMonth - 1]} Net Due</p>
-                                  <p className="font-black text-orange-600 dark:text-orange-400 text-lg tabular-nums">Rs {worker.monthlyNetPayable.toLocaleString()}</p>
+                                  <p className="text-[8px] font-black uppercase tracking-widest text-orange-600">
+                                     {tempViewMode === 'all_time' ? 'Lifetime Settled' : `${SHORT_MONTH_NAMES[selectedMonth - 1]} Net Due`}
+                                  </p>
+                                  <p className="font-black text-orange-600 dark:text-orange-400 text-lg tabular-nums">
+                                     Rs {(tempViewMode === 'all_time' ? worker.totalPaidOut : worker.monthlyNetPayable).toLocaleString()}
+                                  </p>
                                </div>
                                <div className="text-right">
                                   <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Total Wallet Balance</p>
