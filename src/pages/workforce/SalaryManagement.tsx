@@ -24,8 +24,13 @@ import {
   Zap,
   TrendingUp,
   TrendingDown,
-  LayoutDashboard
+  LayoutDashboard,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const SHORT_MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -71,6 +76,32 @@ export default function SalaryManagement() {
   const [payrollSearch, setPayrollSearch] = useState('');
   const [tempSearch, setTempSearch] = useState('');
   const [rosterSearch, setRosterSearch] = useState('');
+
+  const handlePrevMonth = () => {
+    if (selectedMonth === 1) {
+      setSelectedMonth(12);
+      setSelectedYear(prev => prev - 1);
+    } else {
+      setSelectedMonth(prev => prev - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (selectedMonth === 12) {
+      setSelectedMonth(1);
+      setSelectedYear(prev => prev + 1);
+    } else {
+      setSelectedMonth(prev => prev + 1);
+    }
+  };
+
+  const handleResetToCurrentMonth = () => {
+    const now = new Date();
+    setSelectedMonth(now.getMonth() + 1);
+    setSelectedYear(now.getFullYear());
+  };
+
+  const isCurrentMonth = selectedMonth === (new Date().getMonth() + 1) && selectedYear === new Date().getFullYear();
 
   // Dialog states
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
@@ -227,7 +258,7 @@ export default function SalaryManagement() {
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         
       const totalEarned = workerLedger
-        .filter((e: any) => e.transaction_type === 'wage_earned')
+        .filter((e: any) => e.transaction_type === 'wage_earned' || e.transaction_type === 'bonus_added')
         .reduce((sum: number, e: any) => sum + Number(e.amount), 0);
 
       const totalAdvances = workerLedger
@@ -241,10 +272,11 @@ export default function SalaryManagement() {
       const alreadyPaid = totalAdvances + totalPaidOut;
       const balance = totalEarned - alreadyPaid;
 
-      const monthlyPaid = workerLedger
+      // Month-specific calculations based on selectedMonth and selectedYear
+      const monthlyEarned = workerLedger
         .filter((e: any) => {
           const entryDate = new Date(e.date);
-          return (e.transaction_type === 'payment_made' || e.transaction_type === 'advance_given') &&
+          return (e.transaction_type === 'wage_earned' || e.transaction_type === 'bonus_added') &&
                  (entryDate.getMonth() + 1 === selectedMonth) &&
                  (entryDate.getFullYear() === selectedYear);
         })
@@ -267,7 +299,10 @@ export default function SalaryManagement() {
                  (entryDate.getFullYear() === selectedYear);
         })
         .reduce((sum: number, e: any) => sum + Number(e.amount), 0);
-        
+
+      const monthlyPaid = monthlyAdvances + monthlyPaidOut;
+      const monthlyNetPayable = monthlyEarned - monthlyPaid;
+
       const recentPayment = workerLedger.find((e: any) => e.transaction_type === 'payment_made' || e.transaction_type === 'advance_given');
 
       return {
@@ -277,14 +312,35 @@ export default function SalaryManagement() {
         totalPaidOut,
         alreadyPaid,
         balance,
+        monthlyEarned,
         monthlyPaid,
         monthlyPaidOut,
         monthlyAdvances,
+        monthlyNetPayable,
         recentPayment,
         history: workerLedger
       };
     });
   }, [tempWorkers, allLedgerEntries, selectedMonth, selectedYear]);
+
+  // Comprehensive Temporary Summary for the selected month
+  const tempSummary = useMemo(() => {
+    const totalMonthlyEarned = tempLedgerData.reduce((s, w) => s + w.monthlyEarned, 0);
+    const totalMonthlyAdvances = tempLedgerData.reduce((s, w) => s + w.monthlyAdvances, 0);
+    const totalMonthlyPaidOut = tempLedgerData.reduce((s, w) => s + w.monthlyPaidOut, 0);
+    const totalMonthlyPaid = totalMonthlyAdvances + totalMonthlyPaidOut;
+    const totalMonthlyNetPayable = tempLedgerData.reduce((s, w) => s + w.monthlyNetPayable, 0);
+    const totalWalletBalance = tempLedgerData.reduce((s, w) => s + w.balance, 0);
+
+    return {
+      totalMonthlyEarned,
+      totalMonthlyAdvances,
+      totalMonthlyPaidOut,
+      totalMonthlyPaid,
+      totalMonthlyNetPayable,
+      totalWalletBalance
+    };
+  }, [tempLedgerData]);
 
   // Handlers
   const handleOpenStaffModal = (worker: any = null, type: 'permanent' | 'temporary' = 'permanent') => {
@@ -621,25 +677,53 @@ export default function SalaryManagement() {
               </select>
            </div>
 
-           <div className="h-14 flex items-center gap-2 bg-white dark:bg-neutral-900 p-2 rounded-2xl shadow-premium border border-white/50 dark:border-neutral-800">
-              <CalendarDays size={16} className="ml-3 text-orange-600" />
-              <select 
-                className="bg-transparent text-[10px] font-black uppercase tracking-widest text-neutral-900 dark:text-neutral-100 pr-4 outline-none appearance-none cursor-pointer"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+           <div className="h-14 flex items-center gap-1.5 bg-white dark:bg-neutral-900 p-2 rounded-2xl shadow-premium border border-white/50 dark:border-neutral-800">
+              <button 
+                onClick={handlePrevMonth}
+                title="Previous Month"
+                className="w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-700 dark:text-neutral-300 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-950/30 transition-colors"
               >
-                {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((m, i) => (
-                  <option key={m} value={i + 1}>{m}</option>
-                ))}
-              </select>
-              <div className="w-px h-6 bg-neutral-100 dark:bg-neutral-800 mx-1" />
-              <select 
-                className="bg-transparent text-[10px] font-black uppercase tracking-widest text-neutral-900 dark:text-neutral-100 pr-4 outline-none appearance-none cursor-pointer pl-2"
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                <ChevronLeft size={16} strokeWidth={2.5} />
+              </button>
+
+              <div className="flex items-center gap-1 px-1">
+                <CalendarDays size={16} className="text-orange-600 shrink-0 ml-1" />
+                <select 
+                  className="bg-transparent text-[11px] font-black uppercase tracking-widest text-neutral-900 dark:text-neutral-100 outline-none appearance-none cursor-pointer pr-1"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                >
+                  {SHORT_MONTH_NAMES.map((m, i) => (
+                    <option key={m} value={i + 1}>{m}</option>
+                  ))}
+                </select>
+                <div className="w-px h-5 bg-neutral-200 dark:bg-neutral-700 mx-1" />
+                <select 
+                  className="bg-transparent text-[11px] font-black uppercase tracking-widest text-neutral-900 dark:text-neutral-100 outline-none appearance-none cursor-pointer pl-1 pr-1"
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                >
+                  {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+
+              <button 
+                onClick={handleNextMonth}
+                title="Next Month"
+                className="w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-700 dark:text-neutral-300 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-950/30 transition-colors"
               >
-                {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
+                <ChevronRight size={16} strokeWidth={2.5} />
+              </button>
+
+              {!isCurrentMonth && (
+                <button
+                  onClick={handleResetToCurrentMonth}
+                  className="text-[9px] font-black uppercase tracking-wider bg-orange-100 dark:bg-orange-950/50 text-orange-600 px-2 py-1 rounded-lg hover:bg-orange-200 transition-colors ml-1"
+                  title="Reset to current month"
+                >
+                  Current
+                </button>
+              )}
            </div>
 
            <Button 
@@ -1039,16 +1123,19 @@ export default function SalaryManagement() {
                     <table className="w-full">
                       <thead>
                         <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/20">
-                          <th className="px-10 py-6 text-left text-[11px] font-black uppercase tracking-widest text-muted-foreground">Personnel</th>
-                          <th className="px-10 py-6 text-right text-[11px] font-black uppercase tracking-widest text-muted-foreground">Daily Rate</th>
-                          <th className="px-10 py-6 text-right text-[11px] font-black uppercase tracking-widest text-muted-foreground">Wallet Balance</th>
-                          <th className="px-10 py-6 text-center text-[11px] font-black uppercase tracking-widest text-muted-foreground">Action</th>
+                          <th className="px-8 py-6 text-left text-[11px] font-black uppercase tracking-widest text-muted-foreground">Personnel</th>
+                          <th className="px-6 py-6 text-right text-[11px] font-black uppercase tracking-widest text-muted-foreground">Daily Rate</th>
+                          <th className="px-6 py-6 text-right text-[11px] font-black uppercase tracking-widest text-muted-foreground">{SHORT_MONTH_NAMES[selectedMonth - 1]} Earned</th>
+                          <th className="px-6 py-6 text-right text-[11px] font-black uppercase tracking-widest text-muted-foreground">{SHORT_MONTH_NAMES[selectedMonth - 1]} Adv/Paid</th>
+                          <th className="px-6 py-6 text-right text-[11px] font-black uppercase tracking-widest text-muted-foreground">{SHORT_MONTH_NAMES[selectedMonth - 1]} Net Due</th>
+                          <th className="px-8 py-6 text-right text-[11px] font-black uppercase tracking-widest text-muted-foreground">Wallet Balance</th>
+                          <th className="px-8 py-6 text-center text-[11px] font-black uppercase tracking-widest text-muted-foreground">Action</th>
                         </tr>
                       </thead>
                        <tbody className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
                          {tempLedgerData.filter(w => tempSearch === '' || w.name.toLowerCase().includes(tempSearch.toLowerCase())).map((worker) => (
                           <tr key={worker.id} className="group hover:bg-neutral-50/50 dark:hover:bg-neutral-800/20 transition-all">
-                            <td className="px-10 py-8">
+                            <td className="px-8 py-8">
                                <div className="flex items-center gap-4">
                                   <div className="relative group/avatar">
                                     <div className="w-12 h-12 rounded-2xl bg-orange-100 dark:bg-orange-950/40 flex items-center justify-center text-orange-600 font-black text-lg group-hover:scale-110 transition-transform">
@@ -1071,17 +1158,37 @@ export default function SalaryManagement() {
                                   </div>
                                </div>
                             </td>
-                            <td className="px-10 py-8 text-right">
-                               <p className="text-xl font-black text-neutral-900 dark:text-neutral-100 tabular-nums">
+                            <td className="px-6 py-8 text-right">
+                               <p className="text-base font-black text-neutral-900 dark:text-neutral-100 tabular-nums">
                                   Rs {Number(worker.daily_rate).toLocaleString()}
                                </p>
                             </td>
-                            <td className="px-10 py-8 text-right">
-                               <p className={`text-2xl font-black tabular-nums ${worker.balance > 0 ? 'text-emerald-500' : worker.balance < 0 ? 'text-red-500' : 'text-neutral-400'}`}>
+                            <td className="px-6 py-8 text-right">
+                               <p className="text-lg font-black text-blue-600 dark:text-blue-400 tabular-nums">
+                                  Rs {worker.monthlyEarned.toLocaleString()}
+                               </p>
+                            </td>
+                            <td className="px-6 py-8 text-right">
+                               <div className="flex flex-col items-end">
+                                 <p className="text-sm font-black text-neutral-700 dark:text-neutral-300 tabular-nums">
+                                    Rs {worker.monthlyPaid.toLocaleString()}
+                                 </p>
+                                 <p className="text-[9px] font-semibold text-muted-foreground mt-0.5">
+                                    Adv: Rs {worker.monthlyAdvances} | Paid: Rs {worker.monthlyPaidOut}
+                                 </p>
+                               </div>
+                            </td>
+                            <td className="px-6 py-8 text-right">
+                               <p className={`text-lg font-black tabular-nums ${worker.monthlyNetPayable > 0 ? 'text-orange-600 dark:text-orange-400' : worker.monthlyNetPayable < 0 ? 'text-red-500' : 'text-neutral-400'}`}>
+                                  Rs {worker.monthlyNetPayable.toLocaleString()}
+                               </p>
+                            </td>
+                            <td className="px-8 py-8 text-right">
+                               <p className={`text-xl font-black tabular-nums ${worker.balance > 0 ? 'text-emerald-500' : worker.balance < 0 ? 'text-red-500' : 'text-neutral-400'}`}>
                                   Rs {worker.balance.toLocaleString()}
                                </p>
                             </td>
-                            <td className="px-10 py-8 text-center">
+                            <td className="px-8 py-8 text-center">
                                <div className="flex gap-2 justify-center">
                                  <Button 
                                    onClick={() => {
@@ -1096,7 +1203,7 @@ export default function SalaryManagement() {
                                  <Button 
                                    onClick={() => {
                                      setLedgerTarget({ id: worker.id, type: 'temporary', name: worker.name });
-                                     setLedgerFormData({ transaction_type: 'advance_given', amount: 0, description: 'Advance Payment', date: new Date().toISOString().split('T')[0] });
+                                     setLedgerFormData({ transaction_type: 'advance_given', amount: 0, description: `Advance - ${SHORT_MONTH_NAMES[selectedMonth - 1]}`, date: new Date().toISOString().split('T')[0] });
                                      setIsLedgerModalOpen(true);
                                    }}
                                    variant="outline"
@@ -1107,7 +1214,7 @@ export default function SalaryManagement() {
                                  <Button 
                                    onClick={() => {
                                      setLedgerTarget({ id: worker.id, type: 'temporary', name: worker.name });
-                                     setLedgerFormData({ transaction_type: 'payment_made', amount: worker.balance > 0 ? worker.balance : 0, description: 'Final Settlement', date: new Date().toISOString().split('T')[0] });
+                                     setLedgerFormData({ transaction_type: 'payment_made', amount: worker.balance > 0 ? worker.balance : 0, description: `Settlement - ${SHORT_MONTH_NAMES[selectedMonth - 1]}`, date: new Date().toISOString().split('T')[0] });
                                      setIsLedgerModalOpen(true);
                                    }}
                                    disabled={worker.balance <= 0}
@@ -1134,15 +1241,15 @@ export default function SalaryManagement() {
                  {/* Mobile Card View */}
                   <div className="lg:hidden p-6 space-y-4">
                      {tempLedgerData.filter(w => tempSearch === '' || w.name.toLowerCase().includes(tempSearch.toLowerCase())).map((worker) => (
-                      <div key={worker.id} className="p-6 rounded-[2.5rem] bg-neutral-50 dark:bg-neutral-800/40 border border-white dark:border-white/5 shadow-sm">
-                         <div className="flex items-center justify-between mb-6">
+                      <div key={worker.id} className="p-6 rounded-[2.5rem] bg-neutral-50 dark:bg-neutral-800/40 border border-white dark:border-white/5 shadow-sm space-y-5">
+                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                <div className="w-12 h-12 rounded-2xl bg-orange-100 dark:bg-orange-950/40 flex items-center justify-center text-orange-600 font-black text-lg">
                                   {worker.name[0]}
                                </div>
                                <div>
-                                  <p className="font-black text-neutral-900 dark:text-neutral-100">{worker.name}</p>
-                                  <span className="text-[9px] font-black uppercase tracking-widest text-orange-600 bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded-md mt-1 inline-block">
+                                  <p className="font-black text-neutral-900 dark:text-neutral-100 text-base">{worker.name}</p>
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-orange-600 bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded-md mt-0.5 inline-block">
                                      {worker.skill || 'Temporary'}
                                   </span>
                                </div>
@@ -1157,14 +1264,39 @@ export default function SalaryManagement() {
                             </Button>
                          </div>
 
-                         <div className="grid grid-cols-2 gap-4 mb-6">
-                            <div className="space-y-1">
-                               <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Daily Rate</p>
-                               <p className="text-sm font-black text-neutral-600 dark:text-muted-foreground tabular-nums">Rs {Number(worker.daily_rate).toLocaleString()}</p>
+                         {/* Month-Wise Financial Breakdown Box */}
+                         <div className="p-4 rounded-2xl bg-white dark:bg-neutral-900/60 border border-neutral-200 dark:border-neutral-700/50 space-y-3">
+                            <div className="flex justify-between items-center pb-2 border-b border-neutral-100 dark:border-neutral-800">
+                               <span className="text-[9px] font-black uppercase tracking-widest text-orange-600">
+                                  {MONTH_NAMES[selectedMonth - 1]} {selectedYear} Payroll
+                               </span>
+                               <span className="text-[9px] font-bold text-muted-foreground">
+                                  Rate: Rs {Number(worker.daily_rate).toLocaleString()}
+                               </span>
                             </div>
-                            <div className="space-y-1 text-right">
-                               <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Wallet Balance</p>
-                               <p className={`text-xl font-black tabular-nums ${worker.balance > 0 ? 'text-emerald-500' : worker.balance < 0 ? 'text-red-500' : 'text-neutral-400'}`}>Rs {worker.balance.toLocaleString()}</p>
+
+                            <div className="grid grid-cols-2 gap-3 text-xs">
+                               <div>
+                                  <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">{SHORT_MONTH_NAMES[selectedMonth - 1]} Earned</p>
+                                  <p className="font-black text-blue-600 dark:text-blue-400 text-base tabular-nums">Rs {worker.monthlyEarned.toLocaleString()}</p>
+                               </div>
+                               <div className="text-right">
+                                  <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">{SHORT_MONTH_NAMES[selectedMonth - 1]} Adv/Paid</p>
+                                  <p className="font-black text-neutral-700 dark:text-neutral-300 text-base tabular-nums">Rs {worker.monthlyPaid.toLocaleString()}</p>
+                               </div>
+                            </div>
+
+                            <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800 flex justify-between items-center">
+                               <div>
+                                  <p className="text-[8px] font-black uppercase tracking-widest text-orange-600">{SHORT_MONTH_NAMES[selectedMonth - 1]} Net Due</p>
+                                  <p className="font-black text-orange-600 dark:text-orange-400 text-lg tabular-nums">Rs {worker.monthlyNetPayable.toLocaleString()}</p>
+                               </div>
+                               <div className="text-right">
+                                  <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Total Wallet Balance</p>
+                                  <p className={`font-black text-lg tabular-nums ${worker.balance > 0 ? 'text-emerald-500' : worker.balance < 0 ? 'text-red-500' : 'text-neutral-400'}`}>
+                                     Rs {worker.balance.toLocaleString()}
+                                  </p>
+                               </div>
                             </div>
                          </div>
 
@@ -1183,7 +1315,7 @@ export default function SalaryManagement() {
                              <Button 
                                onClick={() => {
                                  setLedgerTarget({ id: worker.id, type: 'temporary', name: worker.name });
-                                 setLedgerFormData({ transaction_type: 'advance_given', amount: 0, description: 'Advance Payment', date: new Date().toISOString().split('T')[0] });
+                                 setLedgerFormData({ transaction_type: 'advance_given', amount: 0, description: `Advance - ${SHORT_MONTH_NAMES[selectedMonth - 1]}`, date: new Date().toISOString().split('T')[0] });
                                  setIsLedgerModalOpen(true);
                                }}
                                variant="outline"
@@ -1194,7 +1326,7 @@ export default function SalaryManagement() {
                              <Button 
                                onClick={() => {
                                  setLedgerTarget({ id: worker.id, type: 'temporary', name: worker.name });
-                                 setLedgerFormData({ transaction_type: 'payment_made', amount: worker.balance > 0 ? worker.balance : 0, description: 'Final Settlement', date: new Date().toISOString().split('T')[0] });
+                                 setLedgerFormData({ transaction_type: 'payment_made', amount: worker.balance > 0 ? worker.balance : 0, description: `Settlement - ${SHORT_MONTH_NAMES[selectedMonth - 1]}`, date: new Date().toISOString().split('T')[0] });
                                  setIsLedgerModalOpen(true);
                                }}
                                disabled={worker.balance <= 0}
