@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Wallet, 
   CheckCircle, 
@@ -26,7 +26,8 @@ import {
   TrendingDown,
   LayoutDashboard,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ChevronDown
 } from 'lucide-react';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -109,10 +110,41 @@ export default function SalaryManagement() {
   const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [historyTarget, setHistoryTarget] = useState<any>(null);
+  const [historyMonthFilter, setHistoryMonthFilter] = useState<string>('all');
   const [editingStaff, setEditingStaff] = useState<any>(null);
   const [ledgerTarget, setLedgerTarget] = useState<{id: string, type: 'permanent' | 'temporary', name: string} | null>(null);
   const [newWorkerPin, setNewWorkerPin] = useState<string | null>(null);
   const [voidingEntryId, setVoidingEntryId] = useState<string | null>(null);
+
+  // Reset filter when history modal closes
+  useEffect(() => {
+    if (!isHistoryModalOpen) {
+      setHistoryMonthFilter('all');
+    }
+  }, [isHistoryModalOpen]);
+
+  // Derive available months and filtered history for the active history target
+  const availableMonths = useMemo(() => {
+    if (!historyTarget?.history) return [];
+    const monthsMap = new Map<string, string>();
+    historyTarget.history.forEach((entry: any) => {
+      const date = new Date(entry.date);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const label = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+      monthsMap.set(key, label);
+    });
+    return Array.from(monthsMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [historyTarget]);
+
+  const filteredHistory = useMemo(() => {
+    if (!historyTarget?.history) return [];
+    if (historyMonthFilter === 'all') return historyTarget.history;
+    return historyTarget.history.filter((entry: any) => {
+      const date = new Date(entry.date);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      return key === historyMonthFilter;
+    });
+  }, [historyTarget, historyMonthFilter]);
 
   // Data fetching
   const { data: stores = [] } = useStores();
@@ -1859,7 +1891,7 @@ export default function SalaryManagement() {
       {/* Wallet History Modal */}
       <Dialog open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen}>
         <DialogContent className="rounded-[3rem] sm:max-w-md bg-white dark:bg-neutral-900 border-none shadow-premium p-0 overflow-hidden">
-          <div className="bg-white dark:bg-neutral-900 p-10 text-neutral-900 dark:text-white">
+          <div className="bg-white dark:bg-neutral-900 p-10 text-neutral-900 dark:text-white pb-6">
              <DialogHeader>
                 <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-xl shadow-blue-600/30">
                    <Wallet size={32} strokeWidth={2.5} />
@@ -1870,10 +1902,31 @@ export default function SalaryManagement() {
                    <span className="ml-2 text-orange-500">• Tap 🗑 to void a mistaken advance</span>
                 </DialogDescription>
              </DialogHeader>
+
+             {historyTarget?.history?.length > 0 && (
+               <div className="mt-6 flex flex-col gap-2">
+                 <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Filter by Month</label>
+                 <div className="relative">
+                   <select 
+                     className="w-full h-12 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-700 font-bold px-4 shadow-sm outline-none appearance-none cursor-pointer text-xs pr-10 text-neutral-800 dark:text-neutral-200"
+                     value={historyMonthFilter}
+                     onChange={(e) => setHistoryMonthFilter(e.target.value)}
+                   >
+                     <option value="all">All-Time History</option>
+                     {availableMonths.map(([key, label]) => (
+                       <option key={key} value={key}>{label}</option>
+                     ))}
+                   </select>
+                   <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-400">
+                     <ChevronDown size={16} />
+                   </div>
+                 </div>
+               </div>
+             )}
           </div>
           <div className="p-6 max-h-[60vh] overflow-y-auto space-y-6">
-             {historyTarget?.history?.length > 0 ? Object.entries(
-               historyTarget.history.reduce((acc: any, entry: any) => {
+             {filteredHistory?.length > 0 ? Object.entries(
+               filteredHistory.reduce((acc: any, entry: any) => {
                  const date = new Date(entry.date);
                  const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                  if (!acc[monthKey]) acc[monthKey] = { label: date.toLocaleString('default', { month: 'long', year: 'numeric' }), entries: [] };
