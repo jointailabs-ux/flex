@@ -157,6 +157,26 @@ export default function SalaryManagement() {
   const prevYear = selectedMonth === 1 ? selectedYear - 1 : selectedYear;
   const { data: lastMonthSalaries = [] } = useSalaryRecords({ month: prevMonth, year: prevYear });
 
+  const prevMonthLastDateStr = useMemo(() => {
+    const d = new Date(prevYear, prevMonth, 0);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }, [prevMonth, prevYear]);
+
+  const selectedMonthDateStr = useMemo(() => {
+    const now = new Date();
+    if (now.getMonth() + 1 === selectedMonth && now.getFullYear() === selectedYear) {
+      return now.toISOString().split('T')[0];
+    }
+    const d = new Date(selectedYear, selectedMonth, 0);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }, [selectedMonth, selectedYear]);
+
   const { data: allLedgerEntries = [] } = useWorkerLedger();
 
   // Mutations
@@ -186,7 +206,8 @@ export default function SalaryManagement() {
     transaction_type: 'bonus_added', // Default for perm
     amount: '' as any,
     description: '',
-    date: new Date().toISOString().split('T')[0]
+    date: new Date().toISOString().split('T')[0],
+    deduct_month: 'prev_month' as 'prev_month' | 'current_month' | 'custom'
   });
 
   // Derived data
@@ -484,7 +505,20 @@ export default function SalaryManagement() {
       transaction_type: type === 'permanent' ? 'bonus_added' : 'wage_earned',
       amount: '',
       description: '',
-      date: new Date().toISOString().split('T')[0]
+      date: new Date().toISOString().split('T')[0],
+      deduct_month: 'prev_month'
+    });
+    setIsLedgerModalOpen(true);
+  };
+
+  const handleOpenAdvanceModal = (worker: any, type: 'permanent' | 'temporary') => {
+    setLedgerTarget({ id: worker.id, type, name: worker.name });
+    setLedgerFormData({
+      transaction_type: 'advance_given',
+      amount: '',
+      description: `Advance - Cut from ${SHORT_MONTH_NAMES[prevMonth - 1]} ${prevYear} Salary`,
+      date: prevMonthLastDateStr,
+      deduct_month: 'prev_month'
     });
     setIsLedgerModalOpen(true);
   };
@@ -511,14 +545,16 @@ export default function SalaryManagement() {
     if (!ledgerTarget) return;
 
     addLedgerEntryMutation.mutate({
-      ...ledgerFormData,
+      transaction_type: ledgerFormData.transaction_type,
       amount: parseFloat(ledgerFormData.amount) || 0,
+      description: ledgerFormData.description,
+      date: ledgerFormData.date,
       worker_id: ledgerTarget.id,
       worker_type: ledgerTarget.type,
       created_by: profile?.id
     }, {
       onSuccess: () => {
-        toast.success('Ledger updated successfully');
+        toast.success(`Ledger updated for ${ledgerTarget.name}`);
         setIsLedgerModalOpen(false);
       },
       onError: (error: any) => {
@@ -1027,7 +1063,7 @@ export default function SalaryManagement() {
                             </td>
                             <td className="px-10 py-8 text-center">
                                {member.existing ? (
-                                 <div className="inline-flex items-center gap-3 px-6 py-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 text-[11px] font-black uppercase tracking-[0.2em] border border-emerald-100 dark:border-emerald-900/30">
+               <div className="inline-flex items-center gap-3 px-6 py-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 text-[11px] font-black uppercase tracking-[0.2em] border border-emerald-100 dark:border-emerald-900/30">
                                    <CheckCircle size={16} strokeWidth={3} />
                                    Paid
                                  </div>
@@ -1044,7 +1080,14 @@ export default function SalaryManagement() {
                                      }}
                                      className="h-11 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-neutral-100 dark:hover:bg-neutral-800"
                                    >
-                                     Advances
+                                     Wallet History
+                                   </Button>
+                                   <Button
+                                     variant="outline"
+                                     onClick={() => handleOpenAdvanceModal(member, 'permanent')}
+                                     className="h-11 rounded-xl text-[10px] font-black uppercase tracking-widest text-orange-600 border-orange-200 hover:bg-orange-50 dark:hover:bg-orange-950/20"
+                                   >
+                                     + Advance
                                    </Button>
                                    <Button
                                      variant="ghost"
@@ -1118,19 +1161,28 @@ export default function SalaryManagement() {
                             </div>
                          ) : (
                             <div className="flex flex-col gap-2">
-                               <Button
-                                 variant="outline"
-                                 onClick={() => {
-                                   const memberLedger = allLedgerEntries
-                                     .filter((e: any) => e.worker_id === member.id && e.worker_type === 'permanent')
-                                     .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                                   setHistoryTarget({ ...member, history: memberLedger });
-                                   setIsHistoryModalOpen(true);
-                                 }}
-                                 className="h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest"
-                               >
-                                 View Advances
-                               </Button>
+                               <div className="flex gap-2">
+                                 <Button
+                                   variant="outline"
+                                   onClick={() => {
+                                     const memberLedger = allLedgerEntries
+                                       .filter((e: any) => e.worker_id === member.id && e.worker_type === 'permanent')
+                                       .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                                     setHistoryTarget({ ...member, history: memberLedger });
+                                     setIsHistoryModalOpen(true);
+                                   }}
+                                   className="h-11 flex-1 rounded-xl text-[10px] font-black uppercase tracking-widest"
+                                 >
+                                   View Wallet
+                                 </Button>
+                                 <Button
+                                   variant="outline"
+                                   onClick={() => handleOpenAdvanceModal(member, 'permanent')}
+                                   className="h-11 flex-1 rounded-xl text-[10px] font-black uppercase tracking-widest text-orange-600 border-orange-200 hover:bg-orange-50 dark:hover:bg-orange-950/20"
+                                 >
+                                   + Advance
+                                 </Button>
+                               </div>
                                <div className="flex gap-2">
                                  <Button
                                    variant="ghost"
@@ -1423,16 +1475,12 @@ export default function SalaryManagement() {
                                    View Wallet
                                  </Button>
                                  <Button 
-                                   onClick={() => {
-                                     setLedgerTarget({ id: worker.id, type: 'temporary', name: worker.name });
-                                     setLedgerFormData({ transaction_type: 'advance_given', amount: 0, description: `Advance - ${SHORT_MONTH_NAMES[selectedMonth - 1]}`, date: new Date().toISOString().split('T')[0] });
-                                     setIsLedgerModalOpen(true);
-                                   }}
-                                   variant="outline"
-                                   className="h-11 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                                 >
-                                   Advance
-                                 </Button>
+                                    onClick={() => handleOpenAdvanceModal(worker, 'temporary')}
+                                    variant="outline"
+                                    className="h-11 rounded-xl text-[10px] font-black uppercase tracking-widest text-orange-600 border-orange-200 hover:bg-orange-50 dark:hover:bg-orange-950/20"
+                                  >
+                                    + Advance
+                                  </Button>
                                  <Button 
                                    onClick={() => {
                                      setLedgerTarget({ id: worker.id, type: 'temporary', name: worker.name });
@@ -1547,16 +1595,12 @@ export default function SalaryManagement() {
                            </Button>
                            <div className="flex gap-2">
                              <Button 
-                               onClick={() => {
-                                 setLedgerTarget({ id: worker.id, type: 'temporary', name: worker.name });
-                                 setLedgerFormData({ transaction_type: 'advance_given', amount: 0, description: `Advance - ${SHORT_MONTH_NAMES[selectedMonth - 1]}`, date: new Date().toISOString().split('T')[0] });
-                                 setIsLedgerModalOpen(true);
-                               }}
-                               variant="outline"
-                               className="h-11 flex-1 rounded-xl text-[10px] font-black uppercase tracking-widest"
-                             >
-                               Advance
-                             </Button>
+                                onClick={() => handleOpenAdvanceModal(worker, 'temporary')}
+                                variant="outline"
+                                className="h-11 flex-1 rounded-xl text-[10px] font-black uppercase tracking-widest text-orange-600 border-orange-200 hover:bg-orange-50 dark:hover:bg-orange-950/20"
+                              >
+                                + Advance
+                              </Button>
                              <Button 
                                onClick={() => {
                                  setLedgerTarget({ id: worker.id, type: 'temporary', name: worker.name });
@@ -1829,12 +1873,28 @@ export default function SalaryManagement() {
                 <select 
                   className="w-full h-14 rounded-2xl bg-neutral-50 dark:bg-neutral-800 border-none font-bold px-6 shadow-inner outline-none appearance-none cursor-pointer"
                   value={ledgerFormData.transaction_type}
-                  onChange={(e) => setLedgerFormData({...ledgerFormData, transaction_type: e.target.value})}
+                  onChange={(e) => {
+                    const newType = e.target.value;
+                    if (newType === 'advance_given') {
+                      setLedgerFormData(prev => ({
+                        ...prev,
+                        transaction_type: newType,
+                        deduct_month: 'prev_month',
+                        date: prevMonthLastDateStr,
+                        description: `Advance - Cut from ${SHORT_MONTH_NAMES[prevMonth - 1]} ${prevYear} Salary`
+                      }));
+                    } else {
+                      setLedgerFormData(prev => ({
+                        ...prev,
+                        transaction_type: newType
+                      }));
+                    }
+                  }}
                 >
                   {ledgerTarget?.type === 'permanent' ? (
                     <>
                       <option value="bonus_added">Extra Bonus / Incentive</option>
-                      <option value="advance_given">Advance Withdrawal</option>
+                      <option value="advance_given">Advance Withdrawal (Deducted from Pay)</option>
                       <option value="advance_recovered">Advance Recovery</option>
                       <option value="payment_made">Direct Payment</option>
                     </>
@@ -1846,6 +1906,60 @@ export default function SalaryManagement() {
                   )}
                 </select>
               </div>
+
+              {ledgerFormData.transaction_type === 'advance_given' && (
+                <div className="space-y-3 p-4 rounded-2xl bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900/30">
+                  <Label className="text-[11px] font-black uppercase tracking-widest text-orange-600 flex items-center gap-2">
+                    <CalendarDays size={14} /> Cut / Deduct Money From Which Month?
+                  </Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLedgerFormData(prev => ({
+                          ...prev,
+                          deduct_month: 'prev_month',
+                          date: prevMonthLastDateStr,
+                          description: `Advance - Cut from ${SHORT_MONTH_NAMES[prevMonth - 1]} ${prevYear} Salary`
+                        }));
+                      }}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        ledgerFormData.deduct_month === 'prev_month'
+                          ? 'bg-orange-600 text-white border-orange-600 shadow-md font-black'
+                          : 'bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700 font-bold'
+                      }`}
+                    >
+                      <p className="text-xs uppercase tracking-wider">Previous Month</p>
+                      <p className="text-[10px] opacity-90">{SHORT_MONTH_NAMES[prevMonth - 1]} {prevYear} Salary</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLedgerFormData(prev => ({
+                          ...prev,
+                          deduct_month: 'current_month',
+                          date: selectedMonthDateStr,
+                          description: `Advance - Cut from ${SHORT_MONTH_NAMES[selectedMonth - 1]} ${selectedYear} Salary`
+                        }));
+                      }}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        ledgerFormData.deduct_month === 'current_month'
+                          ? 'bg-orange-600 text-white border-orange-600 shadow-md font-black'
+                          : 'bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700 font-bold'
+                      }`}
+                    >
+                      <p className="text-xs uppercase tracking-wider">Current Month</p>
+                      <p className="text-[10px] opacity-90">{SHORT_MONTH_NAMES[selectedMonth - 1]} {selectedYear} Salary</p>
+                    </button>
+                  </div>
+                  <p className="text-[10px] font-bold text-orange-700 dark:text-orange-400 mt-1">
+                    {ledgerFormData.deduct_month === 'prev_month'
+                      ? `• Advance will be deducted from ${MONTH_NAMES[prevMonth - 1]} ${prevYear} salary (disbursed on 10th).`
+                      : `• Advance will be deducted from ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear} salary calculation.`}
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-3">
@@ -1865,7 +1979,7 @@ export default function SalaryManagement() {
                     required 
                     className="h-14 rounded-2xl bg-neutral-50 dark:bg-neutral-800 border-none font-bold px-6 shadow-inner"
                     value={ledgerFormData.date}
-                    onChange={(e) => setLedgerFormData({...ledgerFormData, date: e.target.value})}
+                    onChange={(e) => setLedgerFormData({...ledgerFormData, date: e.target.value, deduct_month: 'custom'})}
                   />
                 </div>
               </div>
