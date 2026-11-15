@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { usePermanentStaff, useTempWorkers, useAttendance } from '../../hooks/queries/useWorkforce';
+import { usePermanentStaff, useTempWorkers, useAttendance, useAttendanceRequests } from '../../hooks/queries/useWorkforce';
+import AdminAttendanceRequestsApproval from '../../components/workforce/AdminAttendanceRequestsApproval';
 import { 
   useMarkBulkAttendance, 
   useDeletePermanentStaff, 
@@ -39,6 +40,8 @@ import { Label } from "../../components/ui/label";
 
 export default function AttendancePage() {
   const { profile } = useAuth();
+  const [activeTab, setActiveTab] = useState<'attendance' | 'requests'>('attendance');
+  const { data: pendingRequests = [] } = useAttendanceRequests({ status: 'pending' });
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterType, setFilterType] = useState<'all' | 'permanent' | 'temporary'>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -363,7 +366,42 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between bg-neutral-900/40 p-6 rounded-3xl border border-white/5">
+      {/* Top Workforce Mode Switcher */}
+      <div className="flex items-center gap-2 bg-neutral-900/60 p-1.5 rounded-2xl border border-white/10 w-fit">
+        <button
+          type="button"
+          onClick={() => setActiveTab('attendance')}
+          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
+            activeTab === 'attendance'
+              ? 'brand-gradient text-white shadow-lg shadow-orange-500/20'
+              : 'text-neutral-400 hover:text-white'
+          }`}
+        >
+          <Users size={15} /> Daily Attendance Roll
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('requests')}
+          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
+            activeTab === 'requests'
+              ? 'brand-gradient text-white shadow-lg shadow-orange-500/20'
+              : 'text-neutral-400 hover:text-white'
+          }`}
+        >
+          <Clock size={15} /> Staff Requests & Night Duty
+          {pendingRequests.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-orange-500 text-white text-[9px] font-black animate-pulse">
+              {pendingRequests.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {activeTab === 'requests' ? (
+        <AdminAttendanceRequestsApproval />
+      ) : (
+        <>
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between bg-neutral-900/40 p-6 rounded-3xl border border-white/5">
         <div className="space-y-1">
           <h2 className="text-3xl font-black tracking-tight text-white flex items-center gap-3 uppercase">
             <Users className="text-orange-600" size={28} strokeWidth={2.5} /> Daily Attendance <span className="text-orange-600 font-light">Roster</span>
@@ -620,6 +658,8 @@ export default function AttendancePage() {
           </div>
         </DialogContent>
       </Dialog>
+        </>
+      )}
 
       {/* Attendance Report Modal */}
       <Dialog open={isReportModalOpen} onOpenChange={setIsReportModalOpen}>

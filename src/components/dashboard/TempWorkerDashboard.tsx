@@ -20,6 +20,8 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkerLedger } from '../../hooks/queries/useWorkforce';
+import StaffAttendanceRequestModal from '../workforce/StaffAttendanceRequestModal';
+import StaffRequestsHistory from '../workforce/StaffRequestsHistory';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const FULL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -27,6 +29,8 @@ const FULL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
 export default function TempWorkerDashboard() {
   const { profile, signOut } = useAuth();
   const { data: allLedgerEntries = [], isLoading } = useWorkerLedger();
+
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
 
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
@@ -152,13 +156,21 @@ export default function TempWorkerDashboard() {
                <p className="text-[9px] font-black text-orange-500 uppercase tracking-[0.2em] mt-1 italic opacity-80">Daily Wage Personnel</p>
             </div>
          </div>
-         <Button 
-           variant="ghost" 
-           onClick={() => signOut()}
-           className="h-12 w-12 rounded-2xl bg-red-600/10 border border-red-600/20 text-red-500 hover:bg-red-600 hover:text-white transition-all active:scale-95 cursor-pointer"
-         >
-           <LogOut size={20} strokeWidth={2.5} />
-         </Button>
+         <div className="flex items-center gap-3">
+           <Button
+             onClick={() => setIsRequestModalOpen(true)}
+             className="h-12 px-5 rounded-2xl brand-gradient text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-orange-500/20 flex items-center gap-2 cursor-pointer hover:scale-105 active:scale-95 transition-all"
+           >
+             <Clock size={16} strokeWidth={2.5} /> Log Attendance / Duty
+           </Button>
+           <Button 
+             variant="ghost" 
+             onClick={() => signOut()}
+             className="h-12 w-12 rounded-2xl bg-red-600/10 border border-red-600/20 text-red-500 hover:bg-red-600 hover:text-white transition-all active:scale-95 cursor-pointer"
+           >
+             <LogOut size={20} strokeWidth={2.5} />
+           </Button>
+         </div>
       </div>
 
       {/* Month Selector Pills & Navigation */}
@@ -277,6 +289,11 @@ export default function TempWorkerDashboard() {
          </CardContent>
       </Card>
 
+      {/* Staff Self-Service Requests & Status */}
+      {profile && (
+        <StaffRequestsHistory workerId={profile.id} />
+      )}
+
       {/* Daily Ledger & Transaction History for Selected Month */}
       <div className="relative z-10 space-y-6">
          <div className="flex items-center justify-between px-4">
@@ -368,6 +385,16 @@ export default function TempWorkerDashboard() {
             </p>
          </div>
       </div>
+
+      {profile && (
+        <StaffAttendanceRequestModal
+          open={isRequestModalOpen}
+          onOpenChange={setIsRequestModalOpen}
+          workerId={profile.id}
+          workerType="temporary"
+          workerName={profile.name}
+        />
+      )}
     </div>
   );
 }

@@ -123,6 +123,20 @@ export const attendanceSchema = z.object({
   notes: z.string().optional()
 });
 
+export const attendanceRequestSchema = z.object({
+  id: z.string().optional(),
+  worker_id: z.string(),
+  worker_type: z.enum(['permanent', 'temporary']),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  duty_type: z.enum(['regular', 'night_duty', 'morning_shift', 'overtime']).default('regular'),
+  attendance_status: z.enum(['present', 'half_day', 'absent', 'leave']).default('present'),
+  hours_worked: z.number().nonnegative().default(8),
+  overtime_hours: z.number().nonnegative().default(0),
+  notes: z.string().optional().nullable(),
+  status: z.enum(['pending', 'approved', 'rejected']).default('pending'),
+  rejection_reason: z.string().optional().nullable()
+});
+
 export const salaryRecordSchema = z.object({
   staff_id: z.string(),
   month: z.number().min(1).max(12),

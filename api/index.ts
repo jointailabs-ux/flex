@@ -14,6 +14,7 @@ import {
   permanentStaffSchema,
   tempWorkerSchema,
   attendanceSchema,
+  attendanceRequestSchema,
   salaryRecordSchema,
   workerLedgerSchema,
   otherExpenseSchema
@@ -1514,6 +1515,266 @@ app.post('/api/workforce/attendance/bulk', requireRole(['owner', 'store_manager'
     res.json({ success: true, saved: records.length });
   } catch (error: any) {
     console.error('Bulk attendance error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+// --- Attendance Requests (Staff Self-Service & Admin Approval) ---
+
+app.get('/api/workforce/attendance-requests', async (req: any, res) => {
+  if (!db) return res.status(503).json({ error: 'Database not initialized' });
+  const { workerId, status, date } = req.query;
+  try {
+    let query = db.from('attendance_requests').select('*').order('created_at', { ascending: false });
+    if (workerId) query = query.eq('worker_id', workerId);
+    if (status && status !== 'all') query = query.eq('status', status);
+    if (date) query = query.eq('date', date);
+
+    const { data: requests, error } = await query;
+    if (error) throw error;
+
+    if (!requests || requests.length === 0) {
+      return res.json([]);
+    }
+
+    // Enrich requests with worker details (name, skill/role, daily_rate)
+    const permIds = requests.filter((r: any) => r.worker_type === 'permanent').map((r: any) => r.worker_id);
+    const tempIds = requests.filter((r: any) => r.worker_type === 'temporary').map((r: any) => r.worker_id);
+
+    const [permRes, tempRes] = await Promise.all([
+      permIds.length > 0 ? db.from('permanent_staff').select('id, name, role').in('id', permIds) : Promise.resolve({ data: [] }),
+      tempIds.length > 0 ? db.from('temp_workers').select('id, name, skill, daily_rate').in('id', tempIds) : Promise.resolve({ data: [] })
+    ]);
+
+    const workerMap = new Map<string, any>();
+    (permRes.data || []).forEach((w: any) => workerMap.set(w.id, { name: w.name, subtitle: w.role }));
+    (tempRes.data || []).forEach((w: any) => workerMap.set(w.id, { name: w.name, subtitle: w.skill || 'Daily Worker', daily_rate: w.daily_rate }));
+
+    const enriched = requests.map((r: any) => {
+      const workerInfo = workerMap.get(r.worker_id);
+      return {
+        ...r,
+        worker_name: workerInfo?.name || 'Staff Member',
+        worker_subtitle: workerInfo?.subtitle || '',
+        daily_rate: workerInfo?.daily_rate || 0
+      };
+    });
+
+    res.json(enriched);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/workforce/attendance-requests', validate(attendanceRequestSchema), async (req: any, res) => {
+  if (!db) return res.status(503).json({ error: 'Database not initialized' });
+  try {
+    const payload = {
+      ...req.body,
+      status: 'pending'
+    };
+
+    const { data, error } = await db.from('attendance_requests').insert([payload]).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/workforce/attendance-requests/:id/approve', requireRole(['owner']), async (req: any, res) => {
+  if (!db) return res.status(503).json({ error: 'Database not initialized' });
+  const { id } = req.params;
+  try {
+    // 1. Fetch request
+    const { data: request, error: reqErr } = await db
+      .from('attendance_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (reqErr || !request) {
+      return res.status(404).json({ error: 'Attendance request not found' });
+    }
+
+    if (request.status === 'approved') {
+      return res.status(400).json({ error: 'Request is already approved' });
+    }
+
+    const reviewerId = req.user?.id && !req.user.id.startsWith('store_') ? req.user.id : null;
+
+    // 2. Update request status to approved
+    const { error: updateReqErr } = await db
+      .from('attendance_requests')
+      .update({
+        status: 'approved',
+        reviewed_by: reviewerId,
+        reviewed_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (updateReqErr) throw updateReqErr;
+
+    const { worker_id, worker_type, date, attendance_status, overtime_hours, duty_type, notes } = request;
+    const effectiveOvertime = Number(overtime_hours || 0);
+
+    // 3. Upsert attendance record
+    const { data: existingAtt } = await db
+      .from('attendance')
+      .select('id')
+      .eq('worker_id', worker_id)
+      .eq('worker_type', worker_type)
+      .eq('date', date)
+      .maybeSingle();
+
+    const formattedNotes = notes ? `[${duty_type.toUpperCase()}] ${notes}` : `[${duty_type.toUpperCase()}]`;
+
+    if (existingAtt) {
+      const { error: attUpdateErr } = await db
+        .from('attendance')
+        .update({
+          status: attendance_status,
+          overtime_hours: effectiveOvertime,
+          notes: formattedNotes
+        })
+        .eq('id', existingAtt.id);
+      if (attUpdateErr) throw attUpdateErr;
+    } else {
+      const { error: attInsertErr } = await db
+        .from('attendance')
+        .insert({
+          worker_id,
+          worker_type,
+          date,
+          status: attendance_status,
+          overtime_hours: effectiveOvertime,
+          notes: formattedNotes
+        });
+      if (attInsertErr) throw attInsertErr;
+    }
+
+    // 4. If worker is temporary, update daily wage & night duty in worker_ledger
+    if (worker_type === 'temporary') {
+      const { data: tempWorker } = await db
+        .from('temp_workers')
+        .select('daily_rate')
+        .eq('id', worker_id)
+        .single();
+
+      const dailyRate = Number(tempWorker?.daily_rate || 0);
+
+      const { data: existingLedger } = await db
+        .from('worker_ledger')
+        .select('id, amount, description, transaction_type')
+        .eq('worker_id', worker_id)
+        .eq('worker_type', 'temporary')
+        .eq('date', date)
+        .eq('transaction_type', 'wage_earned');
+
+      const existingWage = existingLedger?.find((e: any) =>
+        e.description?.toLowerCase().startsWith('daily wage')
+      );
+      const existingNight = existingLedger?.find((e: any) =>
+        e.description?.toLowerCase().startsWith('night duty')
+      );
+
+      // --- Daily Wage ---
+      if (attendance_status === 'present' || attendance_status === 'half_day') {
+        const wageAmount = attendance_status === 'half_day' ? dailyRate / 2 : dailyRate;
+        const [yr, mn, dy] = date.split('-');
+        const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const wageDesc = `Daily Wage - ${dy} ${monthsShort[parseInt(mn, 10) - 1]} ${yr}`;
+
+        if (existingWage) {
+          await db.from('worker_ledger').update({ amount: wageAmount, description: wageDesc }).eq('id', existingWage.id);
+        } else {
+          const { data: lastEntry } = await db
+            .from('worker_ledger')
+            .select('balance')
+            .eq('worker_id', worker_id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const newBal = Number(lastEntry?.balance || 0) + wageAmount;
+          await db.from('worker_ledger').insert({
+            worker_id,
+            worker_type: 'temporary',
+            transaction_type: 'wage_earned',
+            amount: wageAmount,
+            balance: newBal,
+            date,
+            description: wageDesc,
+            created_by: reviewerId
+          });
+        }
+      } else if (existingWage) {
+        await db.from('worker_ledger').delete().eq('id', existingWage.id);
+      }
+
+      // --- Night Duty / Overtime ---
+      const nightHours = effectiveOvertime > 0 ? effectiveOvertime : (duty_type === 'night_duty' ? 8 : 0);
+      if (nightHours > 0) {
+        const nightAmount = (dailyRate / 8) * nightHours;
+        const nightDesc = `Night Duty Allowance - ${nightHours} hrs (${date})`;
+
+        if (existingNight) {
+          await db.from('worker_ledger').update({ amount: nightAmount, description: nightDesc }).eq('id', existingNight.id);
+        } else {
+          const { data: lastEntry } = await db
+            .from('worker_ledger')
+            .select('balance')
+            .eq('worker_id', worker_id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const newBal = Number(lastEntry?.balance || 0) + nightAmount;
+          await db.from('worker_ledger').insert({
+            worker_id,
+            worker_type: 'temporary',
+            transaction_type: 'wage_earned',
+            amount: nightAmount,
+            balance: newBal,
+            date,
+            description: nightDesc,
+            created_by: reviewerId
+          });
+        }
+      } else if (existingNight) {
+        await db.from('worker_ledger').delete().eq('id', existingNight.id);
+      }
+    }
+
+    res.json({ success: true, message: 'Attendance request approved and attendance recorded' });
+  } catch (error: any) {
+    console.error('Approve attendance error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/workforce/attendance-requests/:id/reject', requireRole(['owner']), async (req: any, res) => {
+  if (!db) return res.status(503).json({ error: 'Database not initialized' });
+  const { id } = req.params;
+  const { rejection_reason } = req.body || {};
+  try {
+    const reviewerId = req.user?.id && !req.user.id.startsWith('store_') ? req.user.id : null;
+    const { data, error } = await db
+      .from('attendance_requests')
+      .update({
+        status: 'rejected',
+        rejection_reason: rejection_reason || 'Rejected by System Admin',
+        reviewed_by: reviewerId,
+        reviewed_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, message: 'Attendance request rejected', data });
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });

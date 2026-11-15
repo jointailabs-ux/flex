@@ -45,6 +45,14 @@ export function useAttendance(filters?: { date?: string; workerId?: string; work
   });
 }
 
+export function useAttendanceRequests(filters?: { workerId?: string; status?: string; date?: string }) {
+  const params = new URLSearchParams(filters as any).toString();
+  return useQuery({
+    queryKey: ['workforce', 'attendance-requests', filters],
+    queryFn: () => fetchWithAuth(`/api/workforce/attendance-requests${params ? `?${params}` : ''}`),
+  });
+}
+
 export function useSalaryRecords(filters?: { staffId?: string; month?: number; year?: number }) {
   const params = new URLSearchParams(filters as any).toString();
   return useQuery({

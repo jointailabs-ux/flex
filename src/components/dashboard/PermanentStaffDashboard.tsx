@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   Wallet, 
   History, 
@@ -18,6 +18,8 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSalaryRecords } from '../../hooks/queries/useWorkforce';
+import StaffAttendanceRequestModal from '../workforce/StaffAttendanceRequestModal';
+import StaffRequestsHistory from '../workforce/StaffRequestsHistory';
 
 const getMonthName = (monthNumber: number) => {
   const date = new Date();
@@ -28,6 +30,7 @@ const getMonthName = (monthNumber: number) => {
 export default function PermanentStaffDashboard() {
   const { profile, signOut } = useAuth();
   const { data: allSalaryRecords = [], isLoading } = useSalaryRecords();
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
 
   const paymentStats = useMemo(() => {
     if (!profile) return { totalPaid: 0, payouts: [], recentPayment: null };
@@ -88,13 +91,21 @@ export default function PermanentStaffDashboard() {
                <p className="text-[9px] font-black text-orange-500 uppercase tracking-[0.2em] mt-1 italic opacity-80">Permanent Workforce Unit</p>
             </div>
          </div>
-         <Button 
-           variant="ghost" 
-           onClick={() => signOut()}
-           className="h-12 w-12 rounded-2xl bg-red-600/10 border border-red-600/20 text-red-500 hover:bg-red-600 hover:text-white transition-all active:scale-95"
-         >
-           <LogOut size={20} strokeWidth={2.5} />
-         </Button>
+         <div className="flex items-center gap-3">
+           <Button
+             onClick={() => setIsRequestModalOpen(true)}
+             className="h-12 px-5 rounded-2xl brand-gradient text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-orange-500/20 flex items-center gap-2 cursor-pointer hover:scale-105 active:scale-95 transition-all"
+           >
+             <Clock size={16} strokeWidth={2.5} /> Log Attendance / Duty
+           </Button>
+           <Button 
+             variant="ghost" 
+             onClick={() => signOut()}
+             className="h-12 w-12 rounded-2xl bg-red-600/10 border border-red-600/20 text-red-500 hover:bg-red-600 hover:text-white transition-all active:scale-95"
+           >
+             <LogOut size={20} strokeWidth={2.5} />
+           </Button>
+         </div>
       </div>
 
       {/* Main Impact Hero - Total Received */}
@@ -138,6 +149,11 @@ export default function PermanentStaffDashboard() {
             </div>
          </CardContent>
       </Card>
+
+      {/* Staff Self-Service Attendance Requests */}
+      {profile && (
+        <StaffRequestsHistory workerId={profile.id} />
+      )}
 
       {/* Payment Matrix Section */}
       <div className="relative z-10 space-y-8">
@@ -220,6 +236,16 @@ export default function PermanentStaffDashboard() {
             </p>
          </div>
       </div>
+
+      {profile && (
+        <StaffAttendanceRequestModal
+          open={isRequestModalOpen}
+          onOpenChange={setIsRequestModalOpen}
+          workerId={profile.id}
+          workerType="permanent"
+          workerName={profile.name}
+        />
+      )}
     </div>
   );
 }

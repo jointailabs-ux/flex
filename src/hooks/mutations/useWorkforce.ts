@@ -119,6 +119,39 @@ export function useMarkBulkAttendance() {
   });
 }
 
+export function useSubmitAttendanceRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (formData: any) => mutateWithAuth('/api/workforce/attendance-requests', 'POST', formData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workforce', 'attendance-requests'] });
+    },
+  });
+}
+
+export function useApproveAttendanceRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => mutateWithAuth(`/api/workforce/attendance-requests/${id}/approve`, 'PUT', {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workforce', 'attendance-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['workforce', 'attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['workforce', 'ledger'] });
+    },
+  });
+}
+
+export function useRejectAttendanceRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, rejection_reason }: { id: string; rejection_reason?: string }) =>
+      mutateWithAuth(`/api/workforce/attendance-requests/${id}/reject`, 'PUT', { rejection_reason }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workforce', 'attendance-requests'] });
+    },
+  });
+}
+
 export function useRecordSalary() {
   const queryClient = useQueryClient();
   return useMutation({
