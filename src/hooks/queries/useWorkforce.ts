@@ -37,7 +37,7 @@ export function useTempWorkers(storeId?: string) {
   });
 }
 
-export function useAttendance(filters?: { date?: string; workerId?: string; workerType?: string }) {
+export function useAttendance(filters?: { date?: string; startDate?: string; endDate?: string; workerId?: string; workerType?: string }) {
   const params = new URLSearchParams(filters as any).toString();
   return useQuery({
     queryKey: ['workforce', 'attendance', filters],

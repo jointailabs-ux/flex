@@ -22,6 +22,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useWorkerLedger } from '../../hooks/queries/useWorkforce';
 import StaffAttendanceRequestModal from '../workforce/StaffAttendanceRequestModal';
 import StaffRequestsHistory from '../workforce/StaffRequestsHistory';
+import StaffAttendanceCalendar from '../workforce/StaffAttendanceCalendar';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const FULL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -288,6 +289,31 @@ export default function TempWorkerDashboard() {
             </div>
          </CardContent>
       </Card>
+
+      {/* Visual Monthly Attendance Calendar (Easy for Staff) */}
+      {profile && (
+        <div className="relative z-10 space-y-3">
+          <div className="px-4">
+            <h2 className="text-2xl lg:text-3xl font-black tracking-tight text-neutral-900 dark:text-white uppercase italic leading-none">
+              Monthly <span className="text-orange-600">Attendance</span>
+            </h2>
+            <p className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.3em] mt-1">
+              Visual daily attendance calendar and shift logs
+            </p>
+          </div>
+          <StaffAttendanceCalendar
+            workerId={profile.id}
+            workerType="temporary"
+            workerName={profile.name}
+            initialMonth={selectedMonth}
+            initialYear={selectedYear}
+            onMonthYearChange={(m, y) => {
+              setSelectedMonth(m);
+              setSelectedYear(y);
+            }}
+          />
+        </div>
+      )}
 
       {/* Staff Self-Service Requests & Status */}
       {profile && (
