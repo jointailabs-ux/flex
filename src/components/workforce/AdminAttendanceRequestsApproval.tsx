@@ -4,7 +4,8 @@ import {
 } from '../../hooks/queries/useWorkforce';
 import { 
   useApproveAttendanceRequest, 
-  useRejectAttendanceRequest 
+  useRejectAttendanceRequest,
+  useEditAttendanceRequest
 } from '../../hooks/mutations/useWorkforce';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -25,7 +26,10 @@ import {
   Loader2,
   Users,
   ShieldCheck,
-  ChevronDown
+  ChevronDown,
+  Edit3,
+  RotateCcw,
+  SlidersHorizontal
 } from 'lucide-react';
 import {
   Dialog,
@@ -46,9 +50,21 @@ export default function AdminAttendanceRequestsApproval() {
   const [selectedRequestToReject, setSelectedRequestToReject] = useState<any>(null);
   const [rejectionReason, setRejectionReason] = useState('');
 
+  // Edit modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [selectedRequestToEdit, setSelectedRequestToEdit] = useState<any>(null);
+  const [editDutyType, setEditDutyType] = useState<string>('regular');
+  const [editAttendanceStatus, setEditAttendanceStatus] = useState<string>('present');
+  const [editHoursWorked, setEditHoursWorked] = useState<number>(8);
+  const [editOvertimeHours, setEditOvertimeHours] = useState<number>(0);
+  const [editNotes, setEditNotes] = useState<string>('');
+  const [editStatus, setEditStatus] = useState<'pending' | 'approved' | 'rejected'>('approved');
+  const [editRejectionReason, setEditRejectionReason] = useState<string>('');
+
   const { data: requests = [], isLoading } = useAttendanceRequests();
   const approveMutation = useApproveAttendanceRequest();
   const rejectMutation = useRejectAttendanceRequest();
+  const editMutation = useEditAttendanceRequest();
 
   const filteredRequests = useMemo(() => {
     let list = requests;
@@ -83,7 +99,7 @@ export default function AdminAttendanceRequestsApproval() {
 
   const handleOpenReject = (reqItem: any) => {
     setSelectedRequestToReject(reqItem);
-    setRejectionReason('');
+    setRejectionReason(reqItem.rejection_reason || '');
     setRejectModalOpen(true);
   };
 
@@ -94,11 +110,48 @@ export default function AdminAttendanceRequestsApproval() {
         id: selectedRequestToReject.id,
         rejection_reason: rejectionReason.trim() || 'Request rejected by System Admin'
       });
-      toast.success(`Request for ${selectedRequestToReject.worker_name} has been rejected`);
+      toast.success(
+        selectedRequestToReject.status === 'approved'
+          ? `Revoked & rejected attendance for ${selectedRequestToReject.worker_name}. Attendance & wage records removed.`
+          : `Request for ${selectedRequestToReject.worker_name} has been rejected`
+      );
       setRejectModalOpen(false);
       setSelectedRequestToReject(null);
     } catch (err: any) {
       toast.error(err.message || 'Failed to reject request');
+    }
+  };
+
+  const handleOpenEdit = (reqItem: any) => {
+    setSelectedRequestToEdit(reqItem);
+    setEditDutyType(reqItem.duty_type || 'regular');
+    setEditAttendanceStatus(reqItem.attendance_status || 'present');
+    setEditHoursWorked(Number(reqItem.hours_worked || 8));
+    setEditOvertimeHours(Number(reqItem.overtime_hours || 0));
+    setEditNotes(reqItem.notes || '');
+    setEditStatus(reqItem.status || 'approved');
+    setEditRejectionReason(reqItem.rejection_reason || '');
+    setEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedRequestToEdit) return;
+    try {
+      await editMutation.mutateAsync({
+        id: selectedRequestToEdit.id,
+        duty_type: editDutyType,
+        attendance_status: editAttendanceStatus,
+        hours_worked: Number(editHoursWorked),
+        overtime_hours: Number(editOvertimeHours),
+        notes: editNotes.trim(),
+        status: editStatus,
+        rejection_reason: editStatus === 'rejected' ? (editRejectionReason.trim() || 'Rejected by Admin') : null
+      });
+      toast.success(`Updated attendance request for ${selectedRequestToEdit.worker_name}`);
+      setEditModalOpen(false);
+      setSelectedRequestToEdit(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save changes');
     }
   };
 
@@ -272,13 +325,23 @@ export default function AdminAttendanceRequestsApproval() {
                   )}
 
                   {/* Actions Bar */}
-                  <div className="pt-2 flex items-center justify-between border-t border-black/5 dark:border-white/5">
+                  <div className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t border-black/5 dark:border-white/5">
                     <span className="text-[9px] font-bold text-neutral-400 flex items-center gap-1">
                       <Calendar size={11} /> Submitted {new Date(reqItem.created_at).toLocaleDateString()}
                     </span>
 
-                    {isPending ? (
+                    {isPending && (
                       <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenEdit(reqItem)}
+                          disabled={approveMutation.isPending || rejectMutation.isPending || editMutation.isPending}
+                          className="h-9 px-3 rounded-xl border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-xs font-bold cursor-pointer"
+                        >
+                          <Edit3 size={13} className="mr-1" /> Edit
+                        </Button>
+
                         <Button
                           variant="outline"
                           size="sm"
@@ -303,17 +366,65 @@ export default function AdminAttendanceRequestsApproval() {
                           Approve & Credit
                         </Button>
                       </div>
-                    ) : (
+                    )}
+
+                    {isApproved && (
                       <div className="flex items-center gap-2">
-                        {isApproved ? (
-                          <span className="px-3 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                            <CheckCircle2 size={12} /> Approved & Added to Attendance
-                          </span>
-                        ) : (
-                          <span className="px-3 py-1 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                            <XCircle size={12} /> Rejected
-                          </span>
-                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenEdit(reqItem)}
+                          disabled={editMutation.isPending || rejectMutation.isPending}
+                          className="h-8 px-2.5 rounded-xl border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-[11px] font-bold cursor-pointer"
+                        >
+                          <Edit3 size={12} className="mr-1 text-orange-500" /> Edit Details
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenReject(reqItem)}
+                          disabled={rejectMutation.isPending || editMutation.isPending}
+                          className="h-8 px-2.5 rounded-xl border-red-500/30 text-red-600 hover:bg-red-500/10 text-[11px] font-bold cursor-pointer"
+                        >
+                          <X size={12} className="mr-1" /> Reject Afterwards
+                        </Button>
+
+                        <span className="px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                          <CheckCircle2 size={11} /> Approved
+                        </span>
+                      </div>
+                    )}
+
+                    {isRejected && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenEdit(reqItem)}
+                          disabled={editMutation.isPending || approveMutation.isPending}
+                          className="h-8 px-2.5 rounded-xl border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-[11px] font-bold cursor-pointer"
+                        >
+                          <Edit3 size={12} className="mr-1 text-orange-500" /> Edit Details
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          onClick={() => handleApprove(reqItem)}
+                          disabled={approveMutation.isPending || editMutation.isPending}
+                          className="h-8 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-black uppercase tracking-wider shadow-sm cursor-pointer"
+                        >
+                          {approveMutation.isPending ? (
+                            <Loader2 size={12} className="animate-spin mr-1" />
+                          ) : (
+                            <RotateCcw size={12} className="mr-1" />
+                          )}
+                          Re-Approve & Credit
+                        </Button>
+
+                        <span className="px-2.5 py-1 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                          <XCircle size={11} /> Rejected
+                        </span>
                       </div>
                     )}
                   </div>
@@ -324,21 +435,255 @@ export default function AdminAttendanceRequestsApproval() {
         </div>
       )}
 
+      {/* Edit Request Modal */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="max-w-md rounded-[2.5rem] bg-white dark:bg-neutral-900 border border-black/10 dark:border-white/10 p-6 max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-xl font-black text-neutral-900 dark:text-white uppercase italic tracking-tight flex items-center gap-2">
+              <SlidersHorizontal size={20} className="text-orange-500" />
+              Modify Shift Record
+            </DialogTitle>
+            <DialogDescription className="text-xs text-neutral-500 font-medium">
+              Adjust work hours, duty category, attendance credit, and remarks. All changes immediately sync with staff profile and wages.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedRequestToEdit && (
+            <div className="space-y-4 py-3">
+              {/* Worker & Date Banner */}
+              <div className="p-3.5 rounded-2xl bg-neutral-100 dark:bg-neutral-800/60 border border-black/5 dark:border-white/5 flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-black text-neutral-900 dark:text-white uppercase tracking-tight">
+                    {selectedRequestToEdit.worker_name}
+                  </h4>
+                  <p className="text-[10px] font-bold text-neutral-400">
+                    {selectedRequestToEdit.worker_type === 'temporary' ? 'Daily Wage Worker' : 'Permanent Staff'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-neutral-400 block">Duty Date</span>
+                  <span className="text-xs font-black text-orange-600 dark:text-orange-400">
+                    {selectedRequestToEdit.date}
+                  </span>
+                </div>
+              </div>
+
+              {/* Duty Type Selection */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-wider text-neutral-500">
+                  Duty Type
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'regular', label: 'Regular Day Shift', icon: Sun },
+                    { id: 'morning_shift', label: 'Morning Shift', icon: Sun },
+                    { id: 'night_duty', label: 'Night Duty', icon: Moon },
+                    { id: 'overtime', label: 'Overtime Work', icon: Zap }
+                  ].map((t) => {
+                    const Icon = t.icon;
+                    const isSelected = editDutyType === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => {
+                          setEditDutyType(t.id);
+                          if (t.id === 'night_duty' && editOvertimeHours === 0) {
+                            setEditOvertimeHours(8);
+                          }
+                        }}
+                        className={`p-2.5 rounded-xl border text-[11px] font-bold flex items-center gap-2 cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-orange-600 text-white border-orange-600 shadow-md shadow-orange-600/20'
+                            : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:border-orange-500/40'
+                        }`}
+                      >
+                        <Icon size={14} />
+                        <span>{t.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Attendance Status */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-wider text-neutral-500">
+                  Attendance Credit
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'present', label: 'Full Day (8h)', defaultHours: 8 },
+                    { id: 'half_day', label: 'Half Day (4h)', defaultHours: 4 },
+                    { id: 'absent', label: 'Absent', defaultHours: 0 }
+                  ].map((s) => {
+                    const isSelected = editAttendanceStatus === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => {
+                          setEditAttendanceStatus(s.id);
+                          setEditHoursWorked(s.defaultHours);
+                        }}
+                        className={`p-2 rounded-xl border text-[11px] font-bold text-center cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 border-transparent shadow-md'
+                            : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:border-neutral-400'
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Duty Hours & Overtime Hours */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-neutral-500">
+                    Regular Hours Worked
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="24"
+                    step="0.5"
+                    value={editHoursWorked}
+                    onChange={(e) => setEditHoursWorked(Number(e.target.value))}
+                    className="h-10 rounded-xl text-xs bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-neutral-500">
+                    Night / OT Hours
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="24"
+                    step="0.5"
+                    value={editOvertimeHours}
+                    onChange={(e) => setEditOvertimeHours(Number(e.target.value))}
+                    className="h-10 rounded-xl text-xs bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* Status Decision Toggle */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-wider text-neutral-500">
+                  Decision Status
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditStatus('approved')}
+                    className={`py-2 px-1 rounded-xl border text-[10px] font-black uppercase tracking-wider cursor-pointer transition-all ${
+                      editStatus === 'approved'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20'
+                        : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:text-emerald-600'
+                    }`}
+                  >
+                    Approved
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditStatus('pending')}
+                    className={`py-2 px-1 rounded-xl border text-[10px] font-black uppercase tracking-wider cursor-pointer transition-all ${
+                      editStatus === 'pending'
+                        ? 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/20'
+                        : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:text-amber-600'
+                    }`}
+                  >
+                    Pending
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditStatus('rejected')}
+                    className={`py-2 px-1 rounded-xl border text-[10px] font-black uppercase tracking-wider cursor-pointer transition-all ${
+                      editStatus === 'rejected'
+                        ? 'bg-red-600 text-white border-red-600 shadow-md shadow-red-600/20'
+                        : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:text-red-600'
+                    }`}
+                  >
+                    Rejected
+                  </button>
+                </div>
+              </div>
+
+              {/* If Rejected, Rejection Reason */}
+              {editStatus === 'rejected' && (
+                <div className="space-y-1.5 animate-in fade-in duration-150">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-red-500">
+                    Rejection Reason
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. Incorrect hours or not approved by supervisor"
+                    value={editRejectionReason}
+                    onChange={(e) => setEditRejectionReason(e.target.value)}
+                    className="h-10 rounded-xl text-xs bg-red-50/50 dark:bg-red-950/20 border-red-500/30"
+                  />
+                </div>
+              )}
+
+              {/* Remarks / Notes */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-wider text-neutral-500">
+                  Remarks / Notes
+                </label>
+                <Textarea
+                  placeholder="Add notes about shift adjustments, job packaging details, etc."
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  className="min-h-[70px] rounded-xl text-xs bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditModalOpen(false)}
+              className="h-10 rounded-xl text-xs font-bold"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSaveEdit}
+              disabled={editMutation.isPending}
+              className="h-10 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-black uppercase tracking-wider shadow-md shadow-orange-600/20 cursor-pointer"
+            >
+              {editMutation.isPending ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
+              Save & Apply Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Rejection Reason Dialog */}
       <Dialog open={rejectModalOpen} onOpenChange={setRejectModalOpen}>
         <DialogContent className="max-w-sm rounded-[2rem] bg-white dark:bg-neutral-900 border border-black/10 dark:border-white/10 p-6">
           <DialogHeader className="space-y-1">
             <DialogTitle className="text-lg font-black text-neutral-900 dark:text-white uppercase tracking-tight">
-              Reject Attendance Request
+              {selectedRequestToReject?.status === 'approved' ? 'Revoke & Reject Attendance' : 'Reject Attendance Request'}
             </DialogTitle>
             <DialogDescription className="text-xs text-neutral-500">
-              Provide an optional reason why this attendance request is being rejected. The staff member will see this note.
+              {selectedRequestToReject?.status === 'approved'
+                ? 'This attendance was previously approved. Confirming rejection will revoke this attendance day, remove wage credits from the ledger, and update the staff profile.'
+                : 'Provide an optional reason why this attendance request is being rejected. The staff member will see this note on their profile.'}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-3">
             <Textarea
-              placeholder="e.g., Attendance already recorded by floor supervisor, or incorrect hours"
+              placeholder="e.g., Attendance cancelled, supervisor did not verify hours, or duplicate submission"
               value={rejectionReason}
               onChange={(e) => setRejectionReason(e.target.value)}
               className="min-h-[80px] rounded-xl text-xs bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
@@ -358,7 +703,7 @@ export default function AdminAttendanceRequestsApproval() {
               size="sm"
               onClick={handleConfirmReject}
               disabled={rejectMutation.isPending}
-              className="h-10 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-wider"
+              className="h-10 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-wider cursor-pointer"
             >
               {rejectMutation.isPending ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
               Confirm Rejection

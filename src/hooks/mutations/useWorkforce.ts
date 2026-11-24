@@ -150,6 +150,21 @@ export function useRejectAttendanceRequest() {
       mutateWithAuth(`/api/workforce/attendance-requests/${id}/reject`, 'PUT', { rejection_reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workforce', 'attendance-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['workforce', 'attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['workforce', 'ledger'] });
+    },
+  });
+}
+
+export function useEditAttendanceRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; [key: string]: any }) =>
+      mutateWithAuth(`/api/workforce/attendance-requests/${id}`, 'PUT', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workforce', 'attendance-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['workforce', 'attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['workforce', 'ledger'] });
     },
   });
 }

@@ -207,7 +207,7 @@ export default function StaffAttendanceCalendar({
       if (
         overtimeHours > 0 || 
         (notes && notes.trim() !== '') || 
-        (req && (req.duty_type === 'night_duty' || req.duty_type === 'overtime' || Number(req.overtime_hours) > 0))
+        (req && req.status !== 'rejected' && (req.duty_type === 'night_duty' || req.duty_type === 'overtime' || Number(req.overtime_hours) > 0))
       ) {
         hasYellowStripe = true;
         notesCount++;
@@ -231,6 +231,9 @@ export default function StaffAttendanceCalendar({
         notes,
         hasYellowStripe,
         pendingRequest: req && req.status === 'pending' ? req : null,
+        approvedRequest: req && req.status === 'approved' ? req : null,
+        rejectedRequest: req && req.status === 'rejected' ? req : null,
+        requestInfo: req || null,
         isToday: dateStr === todayStr
       });
     }
@@ -270,7 +273,10 @@ export default function StaffAttendanceCalendar({
       ...cell,
       dayWage,
       dayNightAllowance,
-      totalEarned: dayWage + dayNightAllowance
+      totalEarned: dayWage + dayNightAllowance,
+      approvedRequest: cell.approvedRequest,
+      rejectedRequest: cell.rejectedRequest,
+      requestInfo: cell.requestInfo
     });
     setNoteInput(cell.notes || (cell.pendingRequest?.notes || ''));
     setIsEditingNote(false);
@@ -635,11 +641,30 @@ export default function StaffAttendanceCalendar({
               )}
             </div>
 
-            {/* Pending request note */}
+            {/* Request Status Feedback */}
             {selectedDayDetail.pendingRequest && (
               <div className="flex items-center gap-2 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold">
                 <Clock size={16} className="shrink-0" />
                 <span>You submitted a {selectedDayDetail.pendingRequest.duty_type.replace('_', ' ')} request for this day. Pending Admin Approval.</span>
+              </div>
+            )}
+
+            {selectedDayDetail.rejectedRequest && (
+              <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs">
+                <XCircle size={16} className="shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <div className="font-black uppercase tracking-wider text-[10px]">Duty Request Rejected by Admin</div>
+                  <p className="font-semibold text-neutral-700 dark:text-neutral-300">
+                    Reason: {selectedDayDetail.rejectedRequest.rejection_reason || 'Shift request was rejected by System Admin.'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {selectedDayDetail.approvedRequest && (
+              <div className="flex items-center gap-2 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+                <CheckCircle2 size={16} className="shrink-0" />
+                <span>Shift Approved: {selectedDayDetail.approvedRequest.duty_type.replace('_', ' ')} ({selectedDayDetail.approvedRequest.hours_worked}h)</span>
               </div>
             )}
           </div>
