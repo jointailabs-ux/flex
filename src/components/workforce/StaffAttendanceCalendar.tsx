@@ -161,6 +161,9 @@ export default function StaffAttendanceCalendar({
       notes: string | null;
       hasYellowStripe: boolean;
       pendingRequest: any | null;
+      approvedRequest?: any | null;
+      rejectedRequest?: any | null;
+      requestInfo?: any | null;
       isToday: boolean;
     }> = [];
 
@@ -174,6 +177,9 @@ export default function StaffAttendanceCalendar({
         notes: null,
         hasYellowStripe: false,
         pendingRequest: null,
+        approvedRequest: null,
+        rejectedRequest: null,
+        requestInfo: null,
         isToday: false
       });
     }
