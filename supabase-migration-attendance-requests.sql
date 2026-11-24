@@ -20,9 +20,11 @@ CREATE TABLE IF NOT EXISTS public.attendance_requests (
     reviewed_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT attendance_requests_pkey PRIMARY KEY (id),
-    CONSTRAINT attendance_requests_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.users(id) ON DELETE SET NULL
+    CONSTRAINT attendance_requests_pkey PRIMARY KEY (id)
 );
+
+-- Drop strict foreign key constraint on reviewed_by if it exists (allows PIN/demo admin without constraint failure)
+ALTER TABLE public.attendance_requests DROP CONSTRAINT IF EXISTS attendance_requests_reviewed_by_fkey;
 
 -- 2. Create performance indexes
 CREATE INDEX IF NOT EXISTS idx_attendance_requests_worker_date ON public.attendance_requests (worker_id, date);

@@ -1602,14 +1602,27 @@ app.put('/api/workforce/attendance-requests/:id/approve', requireRole(['owner'])
       return res.status(400).json({ error: 'Request is already approved' });
     }
 
-    const reviewerId = req.user?.id && !req.user.id.startsWith('store_') ? req.user.id : null;
+    // Validate if reviewer ID exists in users table to prevent FK constraint violations
+    let validReviewerId: string | null = null;
+    const candidateReviewerId = req.user?.id && !req.user.id.startsWith('store_') ? req.user.id : null;
+    if (candidateReviewerId) {
+      const { data: userExists } = await db
+        .from('users')
+        .select('id')
+        .eq('id', candidateReviewerId)
+        .maybeSingle();
+
+      if (userExists) {
+        validReviewerId = userExists.id;
+      }
+    }
 
     // 2. Update request status to approved
     const { error: updateReqErr } = await db
       .from('attendance_requests')
       .update({
         status: 'approved',
-        reviewed_by: reviewerId,
+        reviewed_by: validReviewerId,
         reviewed_at: new Date().toISOString()
       })
       .eq('id', id);
@@ -1706,7 +1719,7 @@ app.put('/api/workforce/attendance-requests/:id/approve', requireRole(['owner'])
             balance: newBal,
             date,
             description: wageDesc,
-            created_by: reviewerId
+            created_by: validReviewerId
           });
         }
       } else if (existingWage) {
@@ -1739,7 +1752,7 @@ app.put('/api/workforce/attendance-requests/:id/approve', requireRole(['owner'])
             balance: newBal,
             date,
             description: nightDesc,
-            created_by: reviewerId
+            created_by: validReviewerId
           });
         }
       } else if (existingNight) {
@@ -1759,13 +1772,27 @@ app.put('/api/workforce/attendance-requests/:id/reject', requireRole(['owner']),
   const { id } = req.params;
   const { rejection_reason } = req.body || {};
   try {
-    const reviewerId = req.user?.id && !req.user.id.startsWith('store_') ? req.user.id : null;
+    // Validate if reviewer ID exists in users table to prevent FK constraint violations
+    let validReviewerId: string | null = null;
+    const candidateReviewerId = req.user?.id && !req.user.id.startsWith('store_') ? req.user.id : null;
+    if (candidateReviewerId) {
+      const { data: userExists } = await db
+        .from('users')
+        .select('id')
+        .eq('id', candidateReviewerId)
+        .maybeSingle();
+
+      if (userExists) {
+        validReviewerId = userExists.id;
+      }
+    }
+
     const { data, error } = await db
       .from('attendance_requests')
       .update({
         status: 'rejected',
         rejection_reason: rejection_reason || 'Rejected by System Admin',
-        reviewed_by: reviewerId,
+        reviewed_by: validReviewerId,
         reviewed_at: new Date().toISOString()
       })
       .eq('id', id)
