@@ -180,14 +180,17 @@ app.post('/api/auth/verify-pin', authLimiter, async (req, res) => {
   if (!db) return res.status(503).json({ error: 'Database not initialized' });
   const { pin, storeId } = req.body;
   try {
-    // Check main users table first
-    const { data: user, error: userError } = await db
-      .from('users')
-      .select('*')
-      .eq('pin', pin)
-      .maybeSingle();
+    // Run all PIN checks in parallel for maximum speed
+    const [userRes, permRes, tempRes, storeRes] = await Promise.all([
+      db.from('users').select('*').eq('pin', pin).maybeSingle(),
+      db.from('permanent_staff').select('*, stores(name)').eq('pin', pin).eq('is_active', true).maybeSingle(),
+      db.from('temp_workers').select('*, stores(name)').eq('pin', pin).eq('is_active', true).maybeSingle(),
+      db.from('stores').select('*').eq('pin', pin).maybeSingle()
+    ]);
 
-    if (user) {
+    // Check main users
+    if (userRes.data) {
+      const user = userRes.data;
       if (storeId && user.role === 'store_manager' && user.store_id !== storeId) {
         return res.status(403).json({ error: 'PIN not valid for this store' });
       }
@@ -195,14 +198,8 @@ app.post('/api/auth/verify-pin', authLimiter, async (req, res) => {
     }
 
     // Check permanent_staff
-    const { data: permStaff, error: permError } = await db
-      .from('permanent_staff')
-      .select('*, stores(name)')
-      .eq('pin', pin)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (permStaff) {
+    if (permRes.data) {
+      const permStaff = permRes.data;
       const permProfile = {
         id: permStaff.id,
         name: permStaff.name,
@@ -213,16 +210,9 @@ app.post('/api/auth/verify-pin', authLimiter, async (req, res) => {
       return res.json({ user: permProfile });
     }
 
-    // If not found, check temp_workers
-    const { data: tempWorker, error: tempError } = await db
-      .from('temp_workers')
-      .select('*, stores(name)')
-      .eq('pin', pin)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (tempWorker) {
-      // Create a mock profile for the temp worker
+    // Check temp_workers
+    if (tempRes.data) {
+      const tempWorker = tempRes.data;
       const tempProfile = {
         id: tempWorker.id,
         name: tempWorker.name,
@@ -233,14 +223,9 @@ app.post('/api/auth/verify-pin', authLimiter, async (req, res) => {
       return res.json({ user: tempProfile });
     }
 
-    // If not found in temp_workers, check stores table for store PINs
-    const { data: storeMatch, error: storeError } = await db
-      .from('stores')
-      .select('*')
-      .eq('pin', pin)
-      .maybeSingle();
-
-    if (storeMatch) {
+    // Check stores table for store PINs
+    if (storeRes.data) {
+      const storeMatch = storeRes.data;
       const storeProfile = {
         id: `store_${storeMatch.id}`,
         name: `${storeMatch.name} Manager`,
@@ -1341,6 +1326,81 @@ app.post('/api/workforce/attendance', validate(attendanceSchema), async (req, re
     if (error) throw error;
     res.json(data);
   } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// Update or set day note for attendance
+app.put('/api/workforce/attendance/note', async (req: any, res) => {
+  if (!db) return res.status(503).json({ error: 'Database not initialized' });
+  const { worker_id, date, note } = req.body;
+  if (!worker_id || !date) {
+    return res.status(400).json({ error: 'worker_id and date are required' });
+  }
+
+  try {
+    const cleanNote = typeof note === 'string' ? note.trim() : '';
+
+    // 1. Check if official attendance row exists
+    const { data: existingAtt } = await db
+      .from('attendance')
+      .select('id')
+      .eq('worker_id', worker_id)
+      .eq('date', date)
+      .maybeSingle();
+
+    if (existingAtt) {
+      const { data, error } = await db
+        .from('attendance')
+        .update({ notes: cleanNote || null })
+        .eq('id', existingAtt.id)
+        .select()
+        .single();
+      if (error) throw error;
+      return res.json({ success: true, target: 'attendance', data });
+    }
+
+    // 2. Check if an attendance request exists
+    const { data: existingReq } = await db
+      .from('attendance_requests')
+      .select('id')
+      .eq('worker_id', worker_id)
+      .eq('date', date)
+      .maybeSingle();
+
+    if (existingReq) {
+      const { data, error } = await db
+        .from('attendance_requests')
+        .update({ notes: cleanNote || null })
+        .eq('id', existingReq.id)
+        .select()
+        .single();
+      if (error) throw error;
+      return res.json({ success: true, target: 'attendance_requests', data });
+    }
+
+    // 3. Otherwise create a request with this note
+    const workerType = req.user?.profile?.role === 'temp_worker' ? 'temporary' : 'permanent';
+    const { data, error } = await db
+      .from('attendance_requests')
+      .insert([{
+        worker_id,
+        worker_type: workerType,
+        date,
+        duty_type: 'regular',
+        attendance_status: 'present',
+        hours_worked: 8,
+        overtime_hours: 0,
+        notes: cleanNote || null,
+        status: 'pending'
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, target: 'new_request', data });
+  } catch (error: any) {
+    console.error('Save attendance note error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.post('/api/workforce/attendance/bulk', requireRole(['owner', 'store_manager']), async (req: any, res) => {

@@ -2,17 +2,19 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 
 async function fetchWithAuth(url: string) {
-  const { data: { session } } = await supabase.auth.getSession();
   const headers: Record<string, string> = {};
 
-  if (session?.access_token) {
-    headers['Authorization'] = `Bearer ${session.access_token}`;
+  // Check mock profile synchronously first for instant PIN/terminal query response
+  const mockProfile = localStorage.getItem('mockProfile');
+  if (mockProfile) {
+    headers['x-mock-profile'] = mockProfile;
   } else {
-    // Fallback: send mock profile for demo/PIN-based auth
-    const mockProfile = localStorage.getItem('mockProfile');
-    if (mockProfile) {
-      headers['x-mock-profile'] = mockProfile;
-    }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+    } catch (e) {}
   }
 
   const response = await fetch(url, { headers });

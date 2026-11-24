@@ -2,19 +2,21 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 
 async function mutateWithAuth(url: string, method: string, body: any) {
-  const { data: { session } } = await supabase.auth.getSession();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
 
-  if (session?.access_token) {
-    headers['Authorization'] = `Bearer ${session.access_token}`;
+  // Synchronously check mock profile first for instant PIN/terminal response without waiting on Supabase session
+  const mockProfile = localStorage.getItem('mockProfile');
+  if (mockProfile) {
+    headers['x-mock-profile'] = mockProfile;
   } else {
-    // Fallback: send mock profile for demo/PIN-based auth
-    const mockProfile = localStorage.getItem('mockProfile');
-    if (mockProfile) {
-      headers['x-mock-profile'] = mockProfile;
-    }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+    } catch (e) {}
   }
 
   const response = await fetch(url, {
@@ -147,6 +149,18 @@ export function useRejectAttendanceRequest() {
     mutationFn: ({ id, rejection_reason }: { id: string; rejection_reason?: string }) =>
       mutateWithAuth(`/api/workforce/attendance-requests/${id}/reject`, 'PUT', { rejection_reason }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workforce', 'attendance-requests'] });
+    },
+  });
+}
+
+export function useUpdateAttendanceNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ worker_id, date, note }: { worker_id: string; date: string; note: string }) =>
+      mutateWithAuth('/api/workforce/attendance/note', 'PUT', { worker_id, date, note }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workforce', 'attendance'] });
       queryClient.invalidateQueries({ queryKey: ['workforce', 'attendance-requests'] });
     },
   });

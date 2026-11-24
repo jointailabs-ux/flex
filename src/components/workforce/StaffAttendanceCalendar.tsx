@@ -11,15 +11,24 @@ import {
   XCircle, 
   AlertCircle,
   IndianRupee,
-  Info
+  Info,
+  MessageSquare,
+  Edit3,
+  Save,
+  Plus,
+  Loader2,
+  X
 } from 'lucide-react';
 import { 
   useAttendance, 
   useAttendanceRequests, 
   useWorkerLedger 
 } from '../../hooks/queries/useWorkforce';
+import { useUpdateAttendanceNote } from '../../hooks/mutations/useWorkforce';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
+import { Textarea } from '../ui/textarea';
+import { toast } from 'sonner';
 
 interface StaffAttendanceCalendarProps {
   workerId: string;
@@ -56,6 +65,10 @@ export default function StaffAttendanceCalendar({
   const [currentMonth, setCurrentMonth] = useState(initialMonth || (now.getMonth() + 1));
   const [currentYear, setCurrentYear] = useState(initialYear || now.getFullYear());
   const [selectedDayDetail, setSelectedDayDetail] = useState<any | null>(null);
+  const [isEditingNote, setIsEditingNote] = useState(false);
+  const [noteInput, setNoteInput] = useState('');
+
+  const updateNoteMutation = useUpdateAttendanceNote();
 
   // Month navigation
   const handlePrevMonth = () => {
@@ -259,6 +272,28 @@ export default function StaffAttendanceCalendar({
       dayNightAllowance,
       totalEarned: dayWage + dayNightAllowance
     });
+    setNoteInput(cell.notes || (cell.pendingRequest?.notes || ''));
+    setIsEditingNote(false);
+  };
+
+  const handleSaveNote = async () => {
+    if (!selectedDayDetail?.dateStr || !workerId) return;
+    try {
+      await updateNoteMutation.mutateAsync({
+        worker_id: workerId,
+        date: selectedDayDetail.dateStr,
+        note: noteInput.trim()
+      });
+      toast.success(`Note saved for ${selectedDayDetail.dateStr}!`);
+      setSelectedDayDetail((prev: any) => ({
+        ...prev,
+        notes: noteInput.trim() || null,
+        hasYellowStripe: noteInput.trim() !== '' || Number(prev?.overtimeHours || 0) > 0
+      }));
+      setIsEditingNote(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save note');
+    }
   };
 
   return (
@@ -494,12 +529,111 @@ export default function StaffAttendanceCalendar({
               </div>
             )}
 
-            {/* Notes */}
-            {selectedDayDetail.notes && (
-              <p className="text-xs text-neutral-600 dark:text-neutral-400 italic bg-white dark:bg-neutral-900 p-3 rounded-2xl border border-black/5 dark:border-white/5">
-                "{selectedDayDetail.notes}"
-              </p>
-            )}
+            {/* Notes Section with Option to Add / Edit Notes */}
+            <div className="pt-2 border-t border-black/5 dark:border-white/5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5">
+                  <MessageSquare size={13} className="text-amber-500" /> Attendance Note & Shift Remarks
+                </span>
+                {!isEditingNote && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNoteInput(selectedDayDetail.notes || (selectedDayDetail.pendingRequest?.notes || ''));
+                      setIsEditingNote(true);
+                    }}
+                    className="text-[10px] font-black uppercase tracking-wider text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    {selectedDayDetail.notes ? (
+                      <>
+                        <Edit3 size={11} /> Edit Note
+                      </>
+                    ) : (
+                      <>
+                        <Plus size={11} /> Add Note
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {isEditingNote ? (
+                <div className="space-y-2.5 p-3 rounded-2xl bg-white dark:bg-neutral-900 border border-orange-500/20 shadow-sm animate-in fade-in duration-150">
+                  <Textarea
+                    placeholder="e.g. Worked night shift packaging, unloaded shipment, or 2 hrs overtime..."
+                    value={noteInput}
+                    onChange={(e) => setNoteInput(e.target.value)}
+                    className="min-h-[70px] rounded-xl text-xs bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
+                  />
+
+                  {/* Quick suggestion tags */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      '🌙 Night duty packaging',
+                      '🚚 Stock unloading shift',
+                      '⚡ Extra overtime worked',
+                      '🛠 Machine maintenance',
+                      '🏥 Left early (personal)'
+                    ].map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => {
+                          setNoteInput((prev) => (prev ? `${prev}, ${tag}` : tag));
+                        }}
+                        className="px-2 py-1 rounded-lg text-[9px] font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-orange-500/10 hover:text-orange-600 transition-colors cursor-pointer"
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsEditingNote(false)}
+                      disabled={updateNoteMutation.isPending}
+                      className="h-8 px-3 rounded-xl text-xs font-bold text-neutral-400 hover:text-white"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleSaveNote}
+                      disabled={updateNoteMutation.isPending}
+                      className="h-8 px-4 rounded-xl brand-gradient text-white text-xs font-black uppercase tracking-wider shadow-md shadow-orange-500/20"
+                    >
+                      {updateNoteMutation.isPending ? (
+                        <Loader2 size={12} className="animate-spin mr-1" />
+                      ) : (
+                        <Save size={12} className="mr-1" />
+                      )}
+                      Save Note
+                    </Button>
+                  </div>
+                </div>
+              ) : selectedDayDetail.notes ? (
+                <div className="p-3 rounded-2xl bg-white dark:bg-neutral-900 border border-black/5 dark:border-white/5 flex items-start justify-between gap-3">
+                  <p className="text-xs text-neutral-700 dark:text-neutral-300 italic">
+                    "{selectedDayDetail.notes}"
+                  </p>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNoteInput('');
+                    setIsEditingNote(true);
+                  }}
+                  className="w-full py-2.5 px-3 rounded-2xl border border-dashed border-neutral-300 dark:border-neutral-700 text-neutral-400 hover:text-orange-600 hover:border-orange-500/40 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-neutral-50/50 dark:bg-white/[0.01]"
+                >
+                  <Plus size={13} /> Add a work note or shift remark for this day
+                </button>
+              )}
+            </div>
 
             {/* Pending request note */}
             {selectedDayDetail.pendingRequest && (
